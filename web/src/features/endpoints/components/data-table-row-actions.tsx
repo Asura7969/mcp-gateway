@@ -25,6 +25,136 @@ import { Textarea } from '@/components/ui/textarea'
 import { type Endpoint } from '../data/schema'
 import { EndpointsApiService } from '../data/api'
 
+// 创建深色主题样式
+const darkSyntaxStyle = {
+  hljs: {
+    background: '#1f1f23',
+    color: '#f0f0f0'
+  },
+  'hljs-subst': {
+    color: '#f0f0f0'
+  },
+  'hljs-comment': {
+    color: '#a0a0a0'
+  },
+  'hljs-keyword': {
+    color: '#4096ff'
+  },
+  'hljs-attribute': {
+    color: '#4096ff'
+  },
+  'hljs-selector-tag': {
+    color: '#4096ff'
+  },
+  'hljs-meta-keyword': {
+    color: '#4096ff'
+  },
+  'hljs-doctag': {
+    color: '#4096ff'
+  },
+  'hljs-name': {
+    color: '#4096ff'
+  },
+  'hljs-built_in': {
+    color: '#52c41a'
+  },
+  'hljs-literal': {
+    color: '#52c41a'
+  },
+  'hljs-bullet': {
+    color: '#52c41a'
+  },
+  'hljs-code': {
+    color: '#52c41a'
+  },
+  'hljs-addition': {
+    color: '#52c41a'
+  },
+  'hljs-regexp': {
+    color: '#faad14'
+  },
+  'hljs-symbol': {
+    color: '#faad14'
+  },
+  'hljs-variable': {
+    color: '#faad14'
+  },
+  'hljs-template-variable': {
+    color: '#faad14'
+  },
+  'hljs-link': {
+    color: '#faad14'
+  },
+  'hljs-selector-attr': {
+    color: '#faad14'
+  },
+  'hljs-selector-pseudo': {
+    color: '#faad14'
+  },
+  'hljs-type': {
+    color: '#722ed1'
+  },
+  'hljs-string': {
+    color: '#722ed1'
+  },
+  'hljs-number': {
+    color: '#722ed1'
+  },
+  'hljs-selector-id': {
+    color: '#722ed1'
+  },
+  'hljs-selector-class': {
+    color: '#722ed1'
+  },
+  'hljs-quote': {
+    color: '#722ed1'
+  },
+  'hljs-template-tag': {
+    color: '#722ed1'
+  },
+  'hljs-deletion': {
+    color: '#ff4d4f'
+  },
+  'hljs-title': {
+    color: '#ff4d4f'
+  },
+  'hljs-section': {
+    color: '#ff4d4f'
+  },
+  'hljs-function': {
+    color: '#ff4d4f'
+  },
+  'hljs-meta': {
+    color: '#ff4d4f'
+  },
+  'hljs-emphasis': {
+    fontStyle: 'italic'
+  },
+  'hljs-strong': {
+    fontWeight: 'bold'
+  }
+}
+
+// JSON高亮组件
+const JsonHighlighter = ({ children, className = "" }: { children: string; className?: string }) => {
+  const isDarkMode = document.documentElement.classList.contains('dark')
+  
+  return (
+    <SyntaxHighlighter 
+      language="json" 
+      style={isDarkMode ? darkSyntaxStyle : github} 
+      className={className}
+      customStyle={{ 
+        backgroundColor: 'inherit',
+        margin: 0,
+        padding: '12px' // 保持p-3的padding
+      }}
+    >
+      {children}
+    </SyntaxHighlighter>
+  )
+}
+
 interface DataTableRowActionsProps {
   row: Row<Endpoint>
 }
@@ -122,10 +252,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       POST: 'bg-purple-100 text-purple-800',
       PUT: 'bg-orange-100 text-orange-800',
       DELETE: 'bg-red-100 text-red-800',
-      PATCH: 'bg-blue-100 text-blue-800',
+      PATCH: 'bg-primary/10 text-primary',
     }
     
-    return methodClassMap[method] || 'bg-gray-100 text-gray-800'
+    return methodClassMap[method] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
   }
 
   const toggleApiDetail = (index: number) => {
@@ -224,12 +354,12 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                   <span className='font-medium'>基础URL:</span>
                   <span className='ml-2'>{endpointDetail.base_url || '-'}</span>
                 </div>
-                <div>
+                {/* <div>
                   <span className='font-medium'>当前状态:</span>
                   <Badge variant={getStatusConfig(endpointDetail.status).variant} className='ml-2'>
                     {getStatusConfig(endpointDetail.status).label}
                   </Badge>
-                </div>
+                </div> */}
                 <div>
                   <span className='font-medium'>创建时间:</span>
                   <span className='ml-2'>{new Date(endpointDetail.created_at).toLocaleString()}</span>
@@ -250,7 +380,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                       onOpenChange={() => toggleApiDetail(index)}
                     >
                       <CollapsibleTrigger asChild>
-                        <div className='flex items-center justify-between cursor-pointer p-3 bg-gray-50 rounded-md hover:bg-gray-100'>
+                        <div className='flex items-center justify-between cursor-pointer p-3 bg-gray-50 dark:bg-[#1f1f23] rounded-md hover:bg-gray-100 dark:hover:bg-[#303034]'>
                           <div className='flex items-center space-x-2'>
                             <Badge className={getMethodBadgeClass(api.method)}>
                               {api.method}
@@ -265,7 +395,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                           )}
                         </div>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className='mt-2 p-3 bg-gray-50 rounded-md border border-t-0'>
+                      <CollapsibleContent className='mt-2 p-3 bg-gray-50 dark:bg-[#1f1f23] rounded-md border border-t-0 dark:border-[#3a3a3e]'>
                         <div className='space-y-2'>
                           <div>
                             <span className='font-medium'>方法:</span> {api.method}
@@ -312,7 +442,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                           {api.request_body_schema && (
                             <div>
                               <span className='font-medium'>请求体:</span>
-                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 p-2 text-xs'>
+                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] p-2 text-xs border border-gray-200 dark:border-gray-700'>
                                 {JSON.stringify(api.request_body_schema, null, 2)}
                               </pre>
                             </div>
@@ -320,7 +450,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                           {api.response_schema && (
                             <div>
                               <span className='font-medium'>响应体:</span>
-                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 p-2 text-xs'>
+                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] p-2 text-xs'>
                                 {JSON.stringify(api.response_schema, null, 2)}
                               </pre>
                             </div>
@@ -345,9 +475,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                     {copied ? '已复制' : '复制'}
                   </Button>
                 </div>
-                <SyntaxHighlighter language="json" style={github} className="max-h-96 overflow-auto rounded bg-gray-100 p-3 text-sm">
+                <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
                   {JSON.stringify(endpointDetail.swagger_spec, null, 2)}
-                </SyntaxHighlighter>
+                </JsonHighlighter>
               </div>
             </div>
           )}
@@ -405,5 +535,33 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     </>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

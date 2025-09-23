@@ -38,8 +38,139 @@ import SyntaxHighlighter from 'react-syntax-highlighter'
 import { github } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { type Endpoint } from '../data/schema'
 import { EndpointsApiService } from '../data/api'
+
+// 创建深色主题样式
+const darkSyntaxStyle = {
+  hljs: {
+    background: '#1f1f23',
+    color: '#f0f0f0'
+  },
+  'hljs-subst': {
+    color: '#f0f0f0'
+  },
+  'hljs-comment': {
+    color: '#a0a0a0'
+  },
+  'hljs-keyword': {
+    color: '#4096ff'
+  },
+  'hljs-attribute': {
+    color: '#4096ff'
+  },
+  'hljs-selector-tag': {
+    color: '#4096ff'
+  },
+  'hljs-meta-keyword': {
+    color: '#4096ff'
+  },
+  'hljs-doctag': {
+    color: '#4096ff'
+  },
+  'hljs-name': {
+    color: '#4096ff'
+  },
+  'hljs-built_in': {
+    color: '#52c41a'
+  },
+  'hljs-literal': {
+    color: '#52c41a'
+  },
+  'hljs-bullet': {
+    color: '#52c41a'
+  },
+  'hljs-code': {
+    color: '#52c41a'
+  },
+  'hljs-addition': {
+    color: '#52c41a'
+  },
+  'hljs-regexp': {
+    color: '#faad14'
+  },
+  'hljs-symbol': {
+    color: '#faad14'
+  },
+  'hljs-variable': {
+    color: '#faad14'
+  },
+  'hljs-template-variable': {
+    color: '#faad14'
+  },
+  'hljs-link': {
+    color: '#faad14'
+  },
+  'hljs-selector-attr': {
+    color: '#faad14'
+  },
+  'hljs-selector-pseudo': {
+    color: '#faad14'
+  },
+  'hljs-type': {
+    color: '#722ed1'
+  },
+  'hljs-string': {
+    color: '#722ed1'
+  },
+  'hljs-number': {
+    color: '#722ed1'
+  },
+  'hljs-selector-id': {
+    color: '#722ed1'
+  },
+  'hljs-selector-class': {
+    color: '#722ed1'
+  },
+  'hljs-quote': {
+    color: '#722ed1'
+  },
+  'hljs-template-tag': {
+    color: '#722ed1'
+  },
+  'hljs-deletion': {
+    color: '#ff4d4f'
+  },
+  'hljs-title': {
+    color: '#ff4d4f'
+  },
+  'hljs-section': {
+    color: '#ff4d4f'
+  },
+  'hljs-function': {
+    color: '#ff4d4f'
+  },
+  'hljs-meta': {
+    color: '#ff4d4f'
+  },
+  'hljs-emphasis': {
+    fontStyle: 'italic'
+  },
+  'hljs-strong': {
+    fontWeight: 'bold'
+  }
+}
+
+// JSON高亮组件
+const JsonHighlighter = ({ children, className = "" }: { children: string; className?: string }) => {
+  const isDarkMode = document.documentElement.classList.contains('dark')
+  
+  return (
+    <SyntaxHighlighter 
+      language="json" 
+      style={isDarkMode ? darkSyntaxStyle : github} 
+      className={className}
+      customStyle={{ 
+        backgroundColor: 'inherit',
+        margin: 0,
+        padding: '12px' // 保持p-3的padding
+      }}
+    >
+      {children}
+    </SyntaxHighlighter>
+  )
+}
 
 // 定义操作列组件
 const ActionsCell = ({ 
@@ -162,19 +293,19 @@ export function EndpointsTable({ data }: DataTableProps) {
     },
     {
       accessorKey: 'name',
-      header: '服务名称',
+      header: 'service',
     },
     {
       accessorKey: 'description',
-      header: '描述',
+      header: 'description',
     },
     {
       accessorKey: 'connection_count',
-      header: '连接数',
+      header: 'connection count',
     },
     {
       accessorKey: 'created_at',
-      header: '创建时间',
+      header: 'create time',
       cell: ({ row }: any) => {
         const date = new Date(row.getValue('created_at'))
         return <div>{date.toLocaleDateString()}</div>
@@ -182,7 +313,7 @@ export function EndpointsTable({ data }: DataTableProps) {
     },
     {
       id: 'actions',
-      header: '操作',
+      header: 'action',
       cell: ({ row }: { row: Row<Endpoint> }) => (
         <ActionsCell 
           row={row}
@@ -245,10 +376,10 @@ export function EndpointsTable({ data }: DataTableProps) {
       POST: 'bg-purple-100 text-purple-800',
       PUT: 'bg-orange-100 text-orange-800',
       DELETE: 'bg-red-100 text-red-800',
-      PATCH: 'bg-blue-100 text-blue-800',
+      PATCH: 'bg-primary/10 text-primary',
     }
     
-    return methodClassMap[method] || 'bg-gray-100 text-gray-800'
+    return methodClassMap[method] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
   }
 
   // 切换API详情展开状态
@@ -335,11 +466,25 @@ export function EndpointsTable({ data }: DataTableProps) {
 
   // 生成MCP配置JSON
   const generateMcpConfig = (endpoint: Endpoint) => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
     return {
       mcpServers: {
         [endpoint.name]: {
           type: "sse",
-          url: `http://localhost:3000/${endpoint.id}/sse`
+          url: `${baseUrl}/${endpoint.id}/sse`
+        }
+      }
+    }
+  }
+
+  // 生成Streamable配置JSON
+  const generateStreamableConfig = (endpoint: Endpoint) => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    return {
+      mcpServers: {
+        [endpoint.name]: {
+          type: "streamable_http",
+          url: `${baseUrl}/stream/${endpoint.id}`
         }
       }
     }
@@ -349,7 +494,7 @@ export function EndpointsTable({ data }: DataTableProps) {
     <div className='space-y-4 max-sm:has-[div[role="toolbar"]]:mb-16'>
       <div className='flex flex-col sm:flex-row gap-4'>
         <Input
-          placeholder='按服务名称搜索...'
+          placeholder='search by service name...'
           value={globalFilter ?? ''}
           onChange={(event) => setGlobalFilter(event.target.value)}
           className='max-w-sm'
@@ -427,12 +572,12 @@ export function EndpointsTable({ data }: DataTableProps) {
                   <span className='font-medium'>基础URL:</span>
                   <span className='ml-2'>{endpointDetail.base_url || '-'}</span>
                 </div>
-                <div>
+                {/* <div>
                   <span className='font-medium'>当前状态:</span>
                   <Badge variant={getStatusConfig(endpointDetail.status).variant} className='ml-2'>
                     {getStatusConfig(endpointDetail.status).label}
                   </Badge>
-                </div>
+                </div> */}
                 <div>
                   <span className='font-medium'>创建时间:</span>
                   <span className='ml-2'>{new Date(endpointDetail.created_at).toLocaleString()}</span>
@@ -445,7 +590,7 @@ export function EndpointsTable({ data }: DataTableProps) {
 
               <div>
                 <h3 className='font-medium mb-3'>方法列表:</h3>
-                <div className='space-y-2'>
+                <div className='space-y-2 text-xs'>
                   {endpointDetail.api_details?.map((api: any, index: number) => (
                     <Collapsible 
                       key={index} 
@@ -453,13 +598,13 @@ export function EndpointsTable({ data }: DataTableProps) {
                       onOpenChange={() => toggleApiDetail(index)}
                     >
                       <CollapsibleTrigger asChild>
-                        <div className='flex items-center justify-between cursor-pointer p-3 bg-gray-50 rounded-md hover:bg-gray-100'>
+                        <div className='flex items-center justify-between cursor-pointer p-3 bg-gray-50 dark:bg-[#1f1f23] rounded-md hover:bg-gray-100 dark:hover:bg-[#303034] text-xs'>
                           <div className='flex items-center space-x-2'>
                             <Badge className={getMethodBadgeClass(api.method)}>
                               {api.method}
                             </Badge>
-                            <span className='font-mono'>{api.path}</span>
-                            {api.summary && <span className='text-muted-foreground'>- {api.summary}</span>}
+                            <span className='font-mono text-xs'>{api.path}</span>
+                            {api.summary && <span className='text-muted-foreground text-xs'>- {api.summary}</span>}
                           </div>
                           {openApiDetails[index] ? (
                             <ChevronDown className='h-4 w-4' />
@@ -468,30 +613,27 @@ export function EndpointsTable({ data }: DataTableProps) {
                           )}
                         </div>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className='mt-2 p-3 bg-gray-50 rounded-md border border-t-0'>
-                        <div className='space-y-2'>
+                      <CollapsibleContent className='p-3 bg-gray-50 dark:bg-[#1f1f23] rounded-md dark:border-[#3a3a3e] text-xs'>
+                        <div className='space-y-2 text-xs'>
                           <div>
-                            <span className='font-medium'>方法:</span> {api.method}
-                          </div>
-                          <div>
-                            <span className='font-medium'>路径:</span> {api.path}
+                            <span className='font-medium text-xs'>路径:</span> <span className="text-xs">{api.path}</span>
                           </div>
                           {api.summary && (
                             <div>
-                              <span className='font-medium'>摘要:</span> {api.summary}
+                              <span className='font-medium text-xs'>摘要:</span> <span className="text-xs">{api.summary}</span>
                             </div>
                           )}
                           {api.description && (
                             <div>
-                              <span className='font-medium'>描述:</span> {api.description}
+                              <span className='font-medium text-xs'>描述:</span> <span className="text-xs">{api.description}</span>
                             </div>
                           )}
                           {api.path_params && api.path_params.length > 0 && (
                             <div>
-                              <span className='font-medium'>路径参数:</span>
-                              <ul className='list-disc list-inside ml-4'>
+                              <span className='font-medium text-xs'>路径参数:</span>
+                              <ul className='list-disc list-inside ml-4 text-xs'>
                                 {api.path_params.map((param: any, paramIndex: number) => (
-                                  <li key={paramIndex}>
+                                  <li key={paramIndex} className="text-xs">
                                     {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
                                     {param.description && ` - ${param.description}`}
                                   </li>
@@ -501,10 +643,10 @@ export function EndpointsTable({ data }: DataTableProps) {
                           )}
                           {api.query_params && api.query_params.length > 0 && (
                             <div>
-                              <span className='font-medium'>查询参数:</span>
-                              <ul className='list-disc list-inside ml-4'>
+                              <span className='font-medium text-xs'>查询参数:</span>
+                              <ul className='list-disc list-inside ml-4 text-xs'>
                                 {api.query_params.map((param: any, paramIndex: number) => (
-                                  <li key={paramIndex}>
+                                  <li key={paramIndex} className="text-xs">
                                     {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
                                     {param.description && ` - ${param.description}`}
                                   </li>
@@ -512,24 +654,23 @@ export function EndpointsTable({ data }: DataTableProps) {
                               </ul>
                             </div>
                           )}
-                          {api.request_body_schema && (
-                            <div>
-                              <span className='font-medium'>请求体:</span>
-                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 p-2 text-xs'>
-                                {JSON.stringify(api.request_body_schema, null, 2)}
-                              </pre>
-                            </div>
-                          )}
-                          {api.response_schema && (
-                            <div>
-                              <span className='font-medium'>响应体:</span>
-                              <pre className='mt-1 max-h-40 overflow-auto rounded bg-gray-100 p-2 text-xs'>
-                                {JSON.stringify(api.response_schema, null, 2)}
-                              </pre>
+                          {(api.request_body_schema || api.response_schema) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {api.request_body_schema && (
+                                <div>
+                                  <ApiFieldDisplay schema={api.request_body_schema} title="请求体" />
+                                </div>
+                              )}
+                              {api.response_schema && (
+                                <div>
+                                  <ApiFieldDisplay schema={api.response_schema} title="响应体" />
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       </CollapsibleContent>
+
                     </Collapsible>
                   ))}
                 </div>
@@ -548,9 +689,9 @@ export function EndpointsTable({ data }: DataTableProps) {
                     {copied ? '已复制' : '复制'}
                   </Button>
                 </div>
-                <SyntaxHighlighter language="json" style={github} className="max-h-96 overflow-auto rounded bg-gray-100 p-3 text-sm">
+                <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
                   {JSON.stringify(endpointDetail.swagger_spec, null, 2)}
-                </SyntaxHighlighter>
+                </JsonHighlighter>
               </div>
             </div>
           )}
@@ -618,17 +759,29 @@ export function EndpointsTable({ data }: DataTableProps) {
             </DialogDescription>
           </DialogHeader>
           {selectedEndpoint && (
-            <div className='space-y-4'>
-              <div>
-                <h3 className='font-medium mb-2'>SSE协议配置:</h3>
-                <SyntaxHighlighter language="json" style={github} className="max-h-96 overflow-auto rounded bg-gray-100 p-3 text-sm">
-                  {JSON.stringify(generateMcpConfig(selectedEndpoint), null, 2)}
-                </SyntaxHighlighter>
-              </div>
+            <Tabs defaultValue="sse" className="w-full">
+              <TabsList>
+                <TabsTrigger value="sse">SSE</TabsTrigger>
+                <TabsTrigger value="streamable">Streamable</TabsTrigger>
+              </TabsList>
+              <TabsContent value="sse" className="mt-4">
+                <div>
+                  <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
+                    {JSON.stringify(generateMcpConfig(selectedEndpoint), null, 2)}
+                  </JsonHighlighter>
+                </div>
+              </TabsContent>
+              <TabsContent value="streamable" className="mt-4">
+                <div>
+                  <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
+                    {JSON.stringify(generateStreamableConfig(selectedEndpoint), null, 2)}
+                  </JsonHighlighter>
+                </div>
+              </TabsContent>
               <div className='mt-4 flex justify-end'>
                 <Button onClick={() => setIsConfigOpen(false)}>关闭</Button>
               </div>
-            </div>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>
@@ -663,6 +816,208 @@ export function EndpointsTable({ data }: DataTableProps) {
     </div>
   )
 }
+
+// 创建一个类似Apifox UI的JSON字段展示组件
+function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
+  // 如果schema为空或不是对象，显示简单信息
+  if (!schema || typeof schema !== 'object') {
+    return (
+      <div>
+        <span className='font-medium text-xs'>{title}:</span>
+        <div className="mt-1 p-2 bg-gray-100 dark:bg-[#1f1f23] rounded text-xs">
+          {schema === null ? 'null' : typeof schema === 'object' ? 'object' : schema}
+        </div>
+      </div>
+    );
+  }
+
+  // 渲染字段信息
+  const renderField = (fieldSchema: any, fieldName: string, required: string[] = [], level = 0) => {
+    // 获取字段类型
+    const type = fieldSchema?.type || 'unknown';
+    
+    // 获取字段描述
+    const description = fieldSchema?.description || '';
+    
+    // 检查是否为必填字段
+    const isRequired = required.includes(fieldName);
+    
+    // 检查是否有子字段
+    const hasProperties = fieldSchema?.properties && Object.keys(fieldSchema.properties).length > 0;
+    
+    // 检查是否为数组类型且有items
+    const isArrayWithItems = type === 'array' && fieldSchema?.items;
+    
+    return (
+      <div key={fieldName} className={`ml-${level * 4}`}>
+        {hasProperties ? (
+          // 对于有子字段的对象类型
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer p-2 bg-gray-100 dark:bg-[#1f1f23] rounded hover:bg-gray-200 dark:hover:bg-[#303034] mb-1">
+                <div className="flex items-center">
+                  <span className="font-medium text-xs mr-2">{fieldName}</span>
+                  <span className="text-primary text-xs mr-2">object</span>
+                  {isRequired && <span className="text-red-500 text-xs mr-2">*</span>}
+                  {description && <span className="text-gray-500 dark:text-gray-400 text-xs">- {description}</span>}
+                </div>
+                <ChevronDown className="h-4 w-4" />
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="ml-4 border-l-2 border-gray-200 dark:border-[#3a3a3e] pl-2">
+                {Object.entries(fieldSchema.properties).map(([subFieldName, subFieldSchema]: [string, any]) => 
+                  renderField(subFieldSchema, subFieldName, fieldSchema.required || [], level + 1)
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : isArrayWithItems ? (
+          // 对于数组类型
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer p-2 bg-gray-100 dark:bg-[#1f1f23] rounded hover:bg-gray-200 dark:hover:bg-[#303034] mb-1">
+                <div className="flex items-center">
+                  <span className="font-medium text-xs mr-2">{fieldName}</span>
+                  <span className="text-red-600 text-xs mr-2">array</span>
+                  {isRequired && <span className="text-red-500 text-xs mr-2">*</span>}
+                  {description && <span className="text-gray-500 dark:text-gray-400 text-xs">- {description}</span>}
+                </div>
+                <ChevronDown className="h-4 w-4" />
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="ml-4 border-l-2 border-gray-200 dark:border-[#3a3a3e] pl-2">
+                <div className="p-2 bg-gray-50 dark:bg-[#1f1f23] rounded mb-1">
+                  <div className="flex items-center">
+                    <span className="font-medium text-xs mr-2">items</span>
+                    {fieldSchema.items.type && (
+                      <span className={`text-xs mr-2 ${
+                        fieldSchema.items.type === 'string' ? 'text-green-600' : 
+                        fieldSchema.items.type === 'number' || fieldSchema.items.type === 'integer' ? 'text-purple-600' : 
+                        fieldSchema.items.type === 'boolean' ? 'text-yellow-600' : 
+                        fieldSchema.items.type === 'object' ? 'text-primary' : 
+                        'text-gray-600'
+                      }`}>
+                        {fieldSchema.items.type}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* 如果数组项是对象类型，显示其属性 */}
+                {fieldSchema.items.type === 'object' && fieldSchema.items.properties && (
+                  <div className="ml-4 border-l-2 border-gray-200 dark:border-[#3a3a3e] pl-2">
+                    {Object.entries(fieldSchema.items.properties).map(([subFieldName, subFieldSchema]: [string, any]) => 
+                      renderField(subFieldSchema, subFieldName, fieldSchema.items.required || [], level + 2)
+                    )}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          // 对于基本类型字段
+          <div className="p-2 bg-gray-50 dark:bg-[#1f1f23] rounded mb-1">
+            <div className="flex items-center">
+              <span className="font-medium text-xs mr-2">{fieldName}</span>
+              <span className={`text-xs mr-2 ${
+                type === 'string' ? 'text-green-600' : 
+                type === 'number' || type === 'integer' ? 'text-purple-600' : 
+                type === 'boolean' ? 'text-yellow-600' : 
+                type === 'array' ? 'text-red-600' : 
+                'text-gray-600'
+              }`}>
+                {type}
+              </span>
+              {isRequired && <span className="text-red-500 text-xs mr-2">*</span>}
+              {description && <span className="text-gray-500 dark:text-gray-400 text-xs">- {description}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 获取根对象的属性
+  const properties = schema?.properties || {};
+  const required = schema?.required || [];
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-white dark:bg-[#1f1f23]">
+      <span className='font-medium text-xs'>{title}:</span>
+      <div className="mt-1">
+        {Object.entries(properties).map(([fieldName, fieldSchema]: [string, any]) => 
+          renderField(fieldSchema, fieldName, required, 0)
+        )}
+        {Object.keys(properties).length === 0 && (
+          <div className="p-2 bg-gray-100 rounded text-xs">
+            无字段定义
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

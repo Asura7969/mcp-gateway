@@ -2,7 +2,7 @@ import axios from 'axios'
 import { type Endpoint, type CreateEndpoint, type UpdateEndpoint, type EndpointDetail } from './schema'
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
   timeout: 10000,
 })
 
@@ -45,25 +45,5 @@ export class EndpointsApiService {
 
   static async deleteEndpoint(id: string): Promise<void> {
     await api.delete(`/api/endpoint/${id}`)
-  }
-
-  static async startEndpoint(id: string): Promise<Endpoint> {
-    const response = await api.post(`/api/endpoint/${id}/start`)
-    return response.data
-  }
-
-  static async stopEndpoint(id: string): Promise<Endpoint> {
-    const response = await api.post(`/api/endpoint/${id}/stop`)
-    return response.data
-  }
-
-  static async getEndpointMetrics(id: string): Promise<any> {
-    const response = await api.get(`/api/endpoint/${id}/metrics`)
-    return response.data
-  }
-
-  static async getSystemStatus(): Promise<any> {
-    const response = await api.get('/api/system/status')
-    return response.data
   }
 }

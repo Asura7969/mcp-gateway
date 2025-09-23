@@ -500,6 +500,187 @@ mod tests {
         .unwrap()
     }
 
+    fn create_array_type_swagger_spec() -> SwaggerSpec {
+        serde_json::from_str(
+            r###"{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Array Type Test API",
+    "description": "测试数组类型字段接口",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://array-test-service.dev.starcharge.cloud"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "获取用户列表",
+        "description": "返回用户列表信息，包含复杂对象数组",
+        "operationId": "getUsers",
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "description": "用户列表",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "用户ID"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "用户姓名"
+                          },
+                          "email": {
+                            "type": "string",
+                            "description": "用户邮箱"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "description": "用户标签",
+                            "items": {
+                              "type": "string",
+                              "description": "标签名称"
+                            }
+                          },
+                          "profile": {
+                            "type": "object",
+                            "description": "用户资料",
+                            "properties": {
+                              "age": {
+                                "type": "integer",
+                                "description": "年龄"
+                              },
+                              "address": {
+                                "type": "string",
+                                "description": "地址"
+                              },
+                              "skills": {
+                                "type": "array",
+                                "description": "技能列表",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "description": "技能名称"
+                                    },
+                                    "level": {
+                                      "type": "string",
+                                      "description": "技能等级",
+                                      "enum": ["beginner", "intermediate", "advanced"]
+                                    }
+                                  },
+                                  "required": ["name", "level"]
+                                }
+                              }
+                            },
+                            "required": ["age"]
+                          }
+                        },
+                        "required": ["id", "name"]
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "description": "总用户数"
+                    }
+                  },
+                  "required": ["users", "total"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建用户",
+        "description": "创建新用户，请求体包含数组类型字段",
+        "operationId": "createUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "用户姓名"
+                  },
+                  "emails": {
+                    "type": "array",
+                    "description": "用户邮箱列表",
+                    "items": {
+                      "type": "string",
+                      "description": "邮箱地址"
+                    }
+                  },
+                  "preferences": {
+                    "type": "array",
+                    "description": "用户偏好设置",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string",
+                          "description": "偏好类别"
+                        },
+                        "enabled": {
+                          "type": "boolean",
+                          "description": "是否启用"
+                        }
+                      },
+                      "required": ["category", "enabled"]
+                    }
+                  }
+                },
+                "required": ["name", "emails"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "用户创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "description": "用户ID"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "成功消息"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}"###,
+        )
+        .unwrap()
+    }
+
     #[tokio::test]
     async fn test_validate_swagger_spec() {
         let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
@@ -673,6 +854,71 @@ mod tests {
         let result = service.check_for_duplicate_paths(&existing, &new);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_api_details_with_array_types() {
+        let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
+        let endpoint_service = EndpointService::new(pool);
+        let service = SwaggerService::new(endpoint_service);
+
+        let spec = create_array_type_swagger_spec();
+        let api_details = service.generate_api_details(&spec).unwrap();
+
+        // 验证生成的API详情数量
+        assert_eq!(api_details.len(), 2); // GET和POST两个方法
+
+        // 验证GET方法详情
+        let get_users = api_details.iter().find(|d| d.method == "GET").unwrap();
+        assert_eq!(get_users.path, "/users");
+        assert_eq!(get_users.summary, Some("获取用户列表".to_string()));
+        
+        // 验证响应体包含数组类型字段
+        assert!(get_users.response_schema.is_some());
+        let response_schema = get_users.response_schema.as_ref().unwrap();
+        let properties = response_schema["properties"].as_object().unwrap();
+        assert!(properties.contains_key("users"));
+        
+        let users_field = &properties["users"];
+        assert_eq!(users_field["type"], "array");
+        assert!(users_field["items"].as_object().is_some());
+        
+        // 验证数组项的对象属性
+        let item_properties = users_field["items"]["properties"].as_object().unwrap();
+        assert!(item_properties.contains_key("id"));
+        assert!(item_properties.contains_key("name"));
+        assert!(item_properties.contains_key("profile"));
+        
+        // 验证嵌套的对象字段
+        let profile_field = &item_properties["profile"];
+        assert_eq!(profile_field["type"], "object");
+        let profile_properties = profile_field["properties"].as_object().unwrap();
+        assert!(profile_properties.contains_key("skills"));
+        
+        // 验证嵌套的数组字段
+        let skills_field = &profile_properties["skills"];
+        assert_eq!(skills_field["type"], "array");
+        assert!(skills_field["items"].as_object().is_some());
+
+        // 验证POST方法详情
+        let create_user = api_details.iter().find(|d| d.method == "POST").unwrap();
+        assert_eq!(create_user.path, "/users");
+        assert_eq!(create_user.summary, Some("创建用户".to_string()));
+        
+        // 验证请求体包含数组类型字段
+        assert!(create_user.request_body_schema.is_some());
+        let request_schema = create_user.request_body_schema.as_ref().unwrap();
+        let req_properties = request_schema["properties"].as_object().unwrap();
+        assert!(req_properties.contains_key("emails"));
+        assert!(req_properties.contains_key("preferences"));
+        
+        let emails_field = &req_properties["emails"];
+        assert_eq!(emails_field["type"], "array");
+        assert_eq!(emails_field["items"]["type"], "string");
+        
+        let preferences_field = &req_properties["preferences"];
+        assert_eq!(preferences_field["type"], "array");
+        assert!(preferences_field["items"].as_object().is_some());
     }
 
     #[tokio::test]

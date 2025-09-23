@@ -35,29 +35,30 @@
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.14 0.04 259.21);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  /* 更接近NaiveUI的深色主题色调 */
+  --background: #18181c; /* 深色背景 */
+  --foreground: #ffffff; /* 前景文字 */
+  --card: #1f1f23; /* 卡片背景 */
+  --card-foreground: #f0f0f0; /* 卡片前景文字 */
+  --popover: #2a2a2e; /* 弹出框背景 */
+  --popover-foreground: #f0f0f0; /* 弹出框前景文字 */
+  --primary: #a0a0a0; /* 主色调 - 浅灰色 */
+  --primary-foreground: #000000; /* 主色调前景文字 */
+  --secondary: #303034; /* 次要背景 */
+  --secondary-foreground: #d0d0d0; /* 次要前景文字 */
+  --muted: #2a2a2e; /* 柔和背景 */
+  --muted-foreground: #a0a0a0; /* 柔和前景文字 */
+  --accent: #a0a0a0; /* 强调色 */
+  --accent-foreground: #000000; /* 强调色前景文字 */
+  --destructive: #ff4d4f; /* 破坏性操作颜色 */
+  --border: #3a3a3e; /* 边框颜色 */
+  --input: #3a3a3e; /* 输入框边框 */
+  --ring: #a0a0a0; /* 焦点环颜色 */
+  --chart-1: #a0a0a0;
+  --chart-2: #52c41a;
+  --chart-3: #faad14;
+  --chart-4: #f5222d;
+  --chart-5: #722ed1;
 }
 
 @theme inline {

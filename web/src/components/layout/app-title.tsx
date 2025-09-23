@@ -8,6 +8,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Button } from '../ui/button'
+import { McpLogo } from '@/assets/mcp-logo'
 
 export function AppTitle() {
   const { setOpenMobile } = useSidebar()
@@ -25,8 +26,11 @@ export function AppTitle() {
               onClick={() => setOpenMobile(false)}
               className='grid flex-1 text-start text-sm leading-tight'
             >
-              <span className='truncate font-bold'>Shadcn-Admin</span>
-              <span className='truncate text-xs'>Vite + ShadcnUI</span>
+              <div className='flex items-center gap-2'>
+                <McpLogo className='size-6' />
+                <span className='truncate font-bold'>Mcp Gateway</span>
+              </div>
+              {/* <span className='truncate text-xs'>API Management</span> */}
             </Link>
             <ToggleSidebar />
           </div>

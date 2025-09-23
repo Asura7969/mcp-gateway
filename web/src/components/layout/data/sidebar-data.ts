@@ -1,5 +1,4 @@
 import {
-  Construction,
   LayoutDashboard,
   Monitor,
   Bug,
@@ -17,27 +16,11 @@ import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: 'satnaing',
-    email: 'satnaingdev@gmail.com',
+    name: 'admin',
+    email: 'admin@mcp-gateway.com',
     avatar: '/avatars/shadcn.jpg',
   },
-  teams: [
-    {
-      name: 'Shadcn Admin',
-      logo: Construction,
-      plan: 'Vite + ShadcnUI',
-    },
-    {
-      name: 'Acme Inc',
-      logo: Construction,
-      plan: 'Enterprise',
-    },
-    {
-      name: 'Acme Corp.',
-      logo: Construction,
-      plan: 'Startup',
-    },
-  ],
+  teams: [], // 移除teams功能，提供空数组以满足类型要求
   navGroups: [
     {
       title: 'General',
@@ -48,9 +31,14 @@ export const sidebarData: SidebarData = {
           icon: LayoutDashboard,
         },
         {
-          title: '端点管理',
+          title: 'Endpoints',
           url: '/endpoints',
           icon: Plug,
+        },
+        {
+          title: 'Monitoring',
+          url: '/monitoring',
+          icon: Monitor,
         },
       ],
     },
@@ -84,7 +72,7 @@ export const sidebarData: SidebarData = {
             {
               title: 'Maintenance Error',
               url: '/errors/maintenance-error',
-              icon: Construction,
+              icon: Bug,
             },
           ],
         },

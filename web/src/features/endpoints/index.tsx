@@ -52,13 +52,13 @@ export function Endpoints() {
       <Main>
         <div className='mb-2 flex flex-wrap items-center justify-between space-y-2 gap-x-4'>
           <div>
-            <h2 className='text-2xl font-bold tracking-tight'>端点管理</h2>
+            <h2 className='text-2xl font-bold tracking-tight'>Endpoints</h2>
             <p className='text-muted-foreground'>
               管理您的MCP端点服务
             </p>
           </div>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
-            创建端点
+            Create
           </Button>
         </div>
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
