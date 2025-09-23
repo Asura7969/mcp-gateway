@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # MCP Gateway Backend
+  mcp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-gateway-backend
+    environment:
+      APP_SERVER__HOST: 0.0.0.0
+      APP_SERVER__PORT: 3000
+      APP_DATABASE__URL: mysql://mcpuser:mcppassword@mysql:3306/mcp_gateway
+      APP_DATABASE__MAX_CONNECTIONS: 10
+      APP_MONITORING__ENABLED: true
+      APP_MONITORING__METRICS_PATH: /metrics
+      RUST_LOG: info
+    ports:
+      - "3000:3000"
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    external_links:
+      - mcp-gateway-mysql:mysql
+
+  # Frontend
+  mcp-frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: mcp-gateway-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - mcp-gateway
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  mcp-network:
+    external: true

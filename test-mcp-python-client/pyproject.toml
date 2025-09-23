@@ -1,0 +1,17 @@
+[project]
+name = "test-mcp-python-client"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.67.0",
+    "mcp>=1.13.1",
+    "python-dotenv>=1.1.1",
+    "requests>=2.32.5",
+    "sseclient-py>=1.8.0",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true

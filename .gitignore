@@ -1,0 +1,49 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+
+# Docker
+.dockerignore
+
+# Node.js (for frontend)
+test-mcp-client/node_modules/
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+web/.env.*.local
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+
+# Monitoring data
+monitoring/data/
+
+# Config files with secrets
+config/local.*
+config/production.*
