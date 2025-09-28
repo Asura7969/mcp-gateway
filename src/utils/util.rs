@@ -1,3 +1,5 @@
+use chrono::{Utc, FixedOffset};
+
 /// 提取请求路径中endpoint
 pub fn extract_endpoint_id(url: &str) -> Option<String> {
     let (_sse, star_tag, end_tag) = stream_or_sse(url);
@@ -20,4 +22,11 @@ fn stream_or_sse(url: &str) -> (bool, &str, &str) {
         // .../stream/... , 实际路径只能截取到stream后面的路径, 所以此处只返回'/'
         (true, "/", "?")
     }
+}
+
+/// 获取东八区时间
+pub fn get_china_time() -> chrono::DateTime<chrono::Utc> {
+    let china_timezone = FixedOffset::east_opt(8 * 3600).unwrap();
+    let local_time = chrono::Local::now().with_timezone(&china_timezone);
+    local_time.with_timezone(&Utc)
 }

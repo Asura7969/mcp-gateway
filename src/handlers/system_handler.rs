@@ -1,6 +1,7 @@
 use crate::state::AppState;
 use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
+use crate::utils::get_china_time;
 
 #[derive(Serialize, Deserialize)]
 pub struct SystemStatus {
@@ -22,7 +23,7 @@ pub async fn get_system_status(
         },
         active_connections: state.shutdown_coordinator.active_connections_count(),
         shutdown_in_progress: state.shutdown_coordinator.is_shutdown_in_progress(),
-        timestamp: chrono::Utc::now(),
+        timestamp: get_china_time(),
     };
 
     Ok(Json(status))

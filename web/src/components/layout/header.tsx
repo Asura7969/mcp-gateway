@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Separator } from '@/components/ui/separator'
+// import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
 type HeaderProps = React.HTMLAttributes<HTMLElement> & {
@@ -42,7 +42,7 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
         )}
       >
         <SidebarTrigger variant='outline' className='max-md:scale-125' />
-        <Separator orientation='vertical' className='h-6' />
+        {/*<Separator orientation='vertical' className='h-6' />*/}
         {children}
       </div>
     </header>

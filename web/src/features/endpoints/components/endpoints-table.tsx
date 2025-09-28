@@ -39,6 +39,7 @@ import { github } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { toast } from 'sonner'
 import { type Endpoint } from '../data/schema'
 import { EndpointsApiService } from '../data/api'
 
@@ -230,9 +231,10 @@ const ActionsCell = ({
 
 type DataTableProps = {
   data: Endpoint[]
+  onDataReload?: () => void
 }
 
-export function EndpointsTable({ data }: DataTableProps) {
+export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   // Local UI-only states
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
@@ -445,6 +447,36 @@ export function EndpointsTable({ data }: DataTableProps) {
     setIsConfigOpen(true)
   }
 
+  // 处理更新端点操作
+  const handleUpdateEndpoint = async () => {
+    if (!selectedEndpoint || !endpointDetail) return
+    
+    try {
+      // 获取表单中的输入值
+      const nameInput = document.querySelector('input[type="text"]') as HTMLInputElement
+      const swaggerTextarea = document.querySelector('textarea') as HTMLTextAreaElement
+      
+      const updateData = {
+        name: nameInput?.value || endpointDetail.name,
+        swagger_content: swaggerTextarea?.value || ''
+      }
+      
+      await EndpointsApiService.updateEndpoint(selectedEndpoint.id, updateData)
+      setIsEditOpen(false)
+      // 调用父组件的重新加载函数而不是刷新整个页面
+      if (onDataReload) {
+        onDataReload()
+      }
+    } catch (error) {
+      console.error('Failed to update endpoint:', error)
+      toast.error('更新端点失败', {
+        description: (error as Error).message || '未知错误',
+        duration: 10000,
+        closeButton: true,
+      })
+    }
+  }
+
   // 确认删除
   const confirmDelete = async () => {
     if (!selectedEndpoint) return
@@ -454,11 +486,15 @@ export function EndpointsTable({ data }: DataTableProps) {
       await EndpointsApiService.deleteEndpoint(selectedEndpoint.id)
       // 关闭确认对话框
       setIsDeleteConfirmOpen(false)
-      // 刷新页面以更新列表
-      window.location.reload()
+      // 重新加载数据而不是刷新整个页面
+      onDataReload?.()
     } catch (error) {
       console.error('Failed to delete endpoint:', error)
-      alert('删除端点失败')
+      toast.error('删除端点失败', {
+        description: (error as Error).message || '未知错误',
+        duration: 10000,
+        closeButton: true,
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -655,13 +691,13 @@ export function EndpointsTable({ data }: DataTableProps) {
                             </div>
                           )}
                           {(api.request_body_schema || api.response_schema) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {api.request_body_schema && (
+                            <div className={api.request_body_schema && api.response_schema && Object.keys(api.request_body_schema).length > 0 && Object.keys(api.response_schema).length > 0 ? "grid grid-cols-1 md:grid-cols-2 gap-4" : ""}>
+                              {api.request_body_schema && Object.keys(api.request_body_schema).length > 0 && (
                                 <div>
                                   <ApiFieldDisplay schema={api.request_body_schema} title="请求体" />
                                 </div>
                               )}
-                              {api.response_schema && (
+                              {api.response_schema && Object.keys(api.response_schema).length > 0 && (
                                 <div>
                                   <ApiFieldDisplay schema={api.response_schema} title="响应体" />
                                 </div>
@@ -732,8 +768,9 @@ export function EndpointsTable({ data }: DataTableProps) {
               <label className='block text-sm font-medium'>Swagger接口详情</label>
               <Textarea
                 defaultValue={endpointDetail?.swagger_spec ? JSON.stringify(endpointDetail.swagger_spec, null, 2) : ''}
-                className='mt-1 w-full rounded border p-2 min-h-[400px] font-mono text-sm resize-y'
+                className='mt-1 w-full rounded border p-2 min-h-[400px] max-h-[600px] font-mono text-sm resize-y'
                 placeholder='请输入Swagger JSON内容'
+                rows={200}
               />
             </div>
           </div>
@@ -741,7 +778,7 @@ export function EndpointsTable({ data }: DataTableProps) {
             <Button variant='secondary' onClick={() => setIsEditOpen(false)}>
               关闭
             </Button>
-            <Button>提交</Button>
+            <Button onClick={handleUpdateEndpoint}>提交</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -958,6 +995,30 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

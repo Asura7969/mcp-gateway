@@ -45,13 +45,17 @@ cd web && npm run build && cd ..
    - 连接数、请求数、响应时间统计
    - 可视化数据展示
 
-4. **优雅停机**
+4. **连接计数**
+   - 实时统计SSE和Streamable会话连接数
+   - 自动更新数据库中的连接计数
+
+5. **优雅停机**
    - 完整的连接跟踪机制
    - 配置化超时时间
    - 强制停机支持
    - 信号处理（SIGTERM, SIGINT）
 
-5. **API 端点**
+6. **API 端点**
    - `/api/endpoint` - 端点管理
    - `/api/swagger` - Swagger 转换
    - `/api/health` - 健康检查

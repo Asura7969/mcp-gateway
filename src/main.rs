@@ -7,33 +7,29 @@ mod state;
 mod utils;
 
 use axum::{
-    body::{Body, Bytes},
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
 use rmcp::transport::common::server_side_http::DEFAULT_AUTO_PING_INTERVAL;
-use rmcp::transport::sse_server::{post_event_handler, sse_handler, App, SseServerConfig};
+use rmcp::transport::sse_server::{post_event_handler, sse_handler, App, ConnectionMsg, SseServerConfig};
 use rmcp::transport::{SseServer, StreamableHttpServerConfig, StreamableHttpService};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::models::DB_POOL;
+use crate::models::{DbPool, DB_POOL};
 use crate::services::McpService;
 use config::Settings;
 use handlers::*;
-use http_body_util::BodyExt;
-use middleware::{cors_layer, track_connection};
+use middleware::{connection_tracking, cors_layer, logging, track_connection};
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use tokio::sync::mpsc::UnboundedReceiver;
+use uuid::Uuid;
 use services::{EndpointService, SwaggerService};
 use state::AppState;
-use utils::{graceful_shutdown_with_timeout, shutdown_signal, ShutdownCoordinator};
+use utils::{graceful_shutdown_with_timeout, shutdown_signal, ShutdownCoordinator, get_china_time};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -57,18 +53,19 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Configuration: {:?}", settings);
 
     // Create database connection pool
-    let pool = create_pool(&settings.database.url, settings.database.max_connections).await?;
-    tracing::info!("Database connection pool created");
-    let db_pool = Arc::new(pool);
-
     let external_pool = create_pool(
         &settings.database.url,
         settings.database.mcp_call_max_connections,
     )
-    .await?;
+        .await?;
     DB_POOL
         .set(external_pool)
         .expect("external_pool already initialized");
+
+    let pool = create_pool(&settings.database.url, settings.database.max_connections).await?;
+    tracing::info!("Database connection pool created");
+    let db_pool = Arc::new(pool);
+
     // Create services
     let endpoint_service = Arc::new(EndpointService::new((*db_pool).clone()));
     let swagger_service = Arc::new(SwaggerService::new(EndpointService::new(
@@ -84,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
         swagger_service,
         mcp_service.clone(),
         shutdown_coordinator.clone(),
+        (*db_pool).clone(),
     );
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
@@ -96,10 +94,16 @@ async fn main() -> anyhow::Result<()> {
         sse_keep_alive: None,
     };
 
-    let (app, transport_rx) = App::new(
+    // 统计sse连接数
+    let (connect_tx, connect_rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let (app, transport_rx) = App::new_v2(
         config.post_path.clone(),
         config.sse_keep_alive.unwrap_or(DEFAULT_AUTO_PING_INTERVAL),
+        Some(connect_tx),
     );
+
+    connect_counter(connect_rx, (*db_pool).clone());
 
     let sse_server = SseServer {
         transport_rx,
@@ -147,6 +151,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/health", get(get_api_health))
         // System status route
         .route("/api/system/status", get(get_system_status))
+        // Connection tracking routes
+        .route("/api/connections/endpoint", get(get_endpoint_connections))
+        .route("/api/connections/endpoint/count", get(get_endpoint_connection_count))
+        .route("/api/connections/time-series", get(get_time_series_connection_counts))
         // rmcp handle
         // .nest("/{endpoint_id}", sse_router)
         .route("/{endpoint_id}/sse", get(sse_handler))
@@ -154,7 +162,10 @@ async fn main() -> anyhow::Result<()> {
         .nest_service("/stream", stream_http_service)
         // Add CORS middleware
         .layer(cors_layer())
-        // .layer(axum::middleware::from_fn(print_request_response))
+        // Add request logging middleware
+        .layer(axum::middleware::from_fn(logging::log_requests))
+        // Add connection tracking middleware
+        .layer(axum::middleware::from_fn(connection_tracking::track_connections))
         // Add connection tracking middleware
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
@@ -208,41 +219,67 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn print_request_response(
-    req: Request,
-    next: Next,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let (parts, body) = req.into_parts();
-    let bytes = buffer_and_print("request", body).await?;
-    let req = Request::from_parts(parts, Body::from(bytes));
+/// sse连接计数器
+fn connect_counter(mut connect_rx: UnboundedReceiver<ConnectionMsg>,
+                   db_pool: DbPool) {
+    tokio::task::spawn(async move {
+        loop {
+            match connect_rx.recv().await {
+                Some(ConnectionMsg::Connect(endpoint_id, session_id)) => {
+                    let now = get_china_time();
+                    let id = Uuid::new_v4();
 
-    let res = next.run(req).await;
+                    let _log_result = sqlx::query(
+                        r#"
+                INSERT INTO endpoint_session_logs (id, endpoint_id, session_id, transport_type, connect_at, disconnect_at)
+                VALUES (?, ?, ?, 1, ?, ?)
+                "#,
+                    )
+                        .bind(id.to_string())
+                        .bind(&endpoint_id)
+                        .bind(session_id.to_string())
+                        .bind(now)
+                        .bind(now)
+                        .execute(&db_pool)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to insert endpoint session log: {}", e);
+                        });
 
-    let (parts, body) = res.into_parts();
-    let bytes = buffer_and_print("response", body).await?;
-    let res = Response::from_parts(parts, Body::from(bytes));
+                    // 使用 UPSERT 操作：如果记录不存在则新增(connect_num=1)，存在则更新(connect_num + 1)
+                    let _ = sqlx::query("INSERT INTO endpoint_connection_counts (id, endpoint_id, connect_num) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE connect_num = connect_num + 1")
+                        .bind(Uuid::new_v4().to_string())
+                        .bind(&endpoint_id)
+                        .execute(&db_pool)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to update connection count for endpoint {}: {}", endpoint_id, e);
+                        });
+                }
+                Some(ConnectionMsg::Disconnect(endpoint_id, session_id)) => {
+                    let _ = sqlx::query("UPDATE endpoint_session_logs SET disconnect_at = ? WHERE endpoint_id = ? and session_id = ?")
+                        .bind(get_china_time())
+                        .bind(&endpoint_id)
+                        .bind(session_id.to_string())
+                        .execute(&db_pool)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to update endpoint session log: {}", e);
+                        });
 
-    Ok(res)
-}
-
-async fn buffer_and_print<B>(direction: &str, body: B) -> Result<Bytes, (StatusCode, String)>
-where
-    B: axum::body::HttpBody<Data = Bytes>,
-    B::Error: std::fmt::Display,
-{
-    let bytes = match body.collect().await {
-        Ok(collected) => collected.to_bytes(),
-        Err(err) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("failed to read {direction} body: {err}"),
-            ));
+                    // 使用 UPSERT 操作：如果记录不存在则新增(connect_num=0)，存在则更新(connect_num - 1)
+                    // 使用 GREATEST 确保连接数不会小于 0
+                    let _ = sqlx::query("INSERT INTO endpoint_connection_counts (id, endpoint_id, connect_num) VALUES (?, ?, 0) ON DUPLICATE KEY UPDATE connect_num = GREATEST(0, connect_num - 1)")
+                        .bind(Uuid::new_v4().to_string())
+                        .bind(&endpoint_id)
+                        .execute(&db_pool)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to update connection count for endpoint {}: {}", endpoint_id, e);
+                        });
+                }
+                None => {}
+            }
         }
-    };
-
-    if let Ok(body) = std::str::from_utf8(&bytes) {
-        tracing::debug!("{direction} body = {body:?}");
-    }
-
-    Ok(bytes)
+    });
 }

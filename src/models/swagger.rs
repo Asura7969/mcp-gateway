@@ -1,4 +1,3 @@
-use crate::models::Endpoint;
 use rmcp::model::Tool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

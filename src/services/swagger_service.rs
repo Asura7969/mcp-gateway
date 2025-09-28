@@ -1,5 +1,5 @@
 use crate::models::{
-    ApiDetail, ApiParameter, CreateEndpointRequest, McpConfig, McpTool, SwaggerSpec,
+    ApiDetail, ApiParameter, CreateEndpointRequest, McpConfig, SwaggerSpec,
     SwaggerToMcpRequest, SwaggerToMcpResponse,
 };
 use crate::services::EndpointService;

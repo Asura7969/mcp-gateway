@@ -3,11 +3,11 @@ use crate::models::{
     EndpointResponse, EndpointStatus, McpConfig, UpdateEndpointRequest,
 };
 use anyhow::Result;
-use chrono::Utc;
 use serde_json::Value;
 use sqlx::Row;
 use std::convert::TryInto;
 use uuid::Uuid;
+use crate::utils::get_china_time;
 
 pub struct EndpointService {
     pool: DbPool,
@@ -49,7 +49,7 @@ impl EndpointService {
             let merged_swagger = self.merge_swagger_specs(existing_swagger, new_swagger)?;
 
             // Update the existing endpoint with merged data
-            let now = Utc::now();
+            let now = get_china_time();
             sqlx::query(
                 "UPDATE endpoints SET description = COALESCE(?, description), swagger_content = ?, updated_at = ? WHERE id = ?"
             )
@@ -69,7 +69,7 @@ impl EndpointService {
         } else {
             // Create new endpoint
             let id = Uuid::new_v4();
-            let now = Utc::now();
+            let now = get_china_time();
 
             let _endpoint_result = sqlx::query(
                 r#"
@@ -358,7 +358,7 @@ impl EndpointService {
         request: UpdateEndpointRequest,
     ) -> Result<EndpointResponse> {
         let mut query = "UPDATE endpoints SET updated_at = ?".to_string();
-        let mut params: Vec<String> = vec![Utc::now().to_rfc3339()];
+        let mut params: Vec<String> = vec![get_china_time().to_rfc3339()];
 
         if let Some(name) = &request.name {
             query.push_str(", name = ?");
@@ -400,7 +400,7 @@ impl EndpointService {
 
     pub async fn delete_endpoint(&self, id: Uuid) -> Result<()> {
         sqlx::query("UPDATE endpoints SET status = 'deleted', updated_at = ? WHERE id = ?")
-            .bind(Utc::now())
+            .bind(get_china_time())
             .bind(id.to_string())
             .execute(&self.pool)
             .await?;
@@ -496,7 +496,7 @@ impl EndpointService {
             .map_err(|e| anyhow::anyhow!("Invalid swagger content: {}", e))?;
 
         sqlx::query("UPDATE endpoints SET status = 'running', updated_at = ? WHERE id = ?")
-            .bind(Utc::now())
+            .bind(get_china_time())
             .bind(id.to_string())
             .execute(&self.pool)
             .await?;
@@ -519,7 +519,7 @@ impl EndpointService {
         }
 
         sqlx::query("UPDATE endpoints SET status = 'stopped', updated_at = ? WHERE id = ?")
-            .bind(Utc::now())
+            .bind(get_china_time())
             .bind(id.to_string())
             .execute(&self.pool)
             .await?;

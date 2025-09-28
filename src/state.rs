@@ -3,6 +3,7 @@ use crate::utils::ShutdownCoordinator;
 use axum::extract::FromRef;
 use rmcp::transport::sse_server::App;
 use std::sync::Arc;
+use crate::models::DbPool;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -10,6 +11,7 @@ pub struct AppState {
     pub swagger_service: Arc<SwaggerService>,
     pub mcp_service: Arc<crate::services::mcp_service::McpService>,
     pub shutdown_coordinator: ShutdownCoordinator,
+    pub pool: DbPool,
 }
 
 impl AppState {
@@ -18,12 +20,14 @@ impl AppState {
         swagger_service: Arc<SwaggerService>,
         mcp_service: Arc<crate::services::mcp_service::McpService>,
         shutdown_coordinator: ShutdownCoordinator,
+        pool: DbPool,
     ) -> Self {
         Self {
             endpoint_service,
             swagger_service,
             mcp_service,
             shutdown_coordinator,
+            pool
         }
     }
 }

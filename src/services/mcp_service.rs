@@ -2,7 +2,7 @@ use crate::models::{DbPool, Endpoint};
 use crate::utils::{
     build_base_url, build_url, extract_request_parts, parse_tool_name, update_metrics,
 };
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

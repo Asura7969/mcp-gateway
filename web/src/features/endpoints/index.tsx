@@ -16,21 +16,21 @@ export function Endpoints() {
   const [loading, setLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // 使用分页 API 获取端点数据
-        const response = await EndpointsApiService.getEndpointsPaginated()
-        setData(response.endpoints)
-      } catch (error) {
-        console.error('Failed to fetch endpoints:', error)
-        // 如果 API 调用失败，使用 mock 数据
-        // setData(endpoints)
-      } finally {
-        setLoading(false)
-      }
+  const fetchData = async () => {
+    try {
+      // 使用分页 API 获取端点数据
+      const response = await EndpointsApiService.getEndpointsPaginated()
+      setData(response.endpoints)
+    } catch (error) {
+      console.error('Failed to fetch endpoints:', error)
+      // 如果 API 调用失败，使用 mock 数据
+      // setData(endpoints)
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchData()
   }, [])
 
@@ -62,7 +62,7 @@ export function Endpoints() {
           </Button>
         </div>
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          <EndpointsTable data={data} />
+          <EndpointsTable data={data} onDataReload={fetchData} />
         </div>
       </Main>
 
