@@ -1,17 +1,16 @@
-use crate::services::{EndpointService, SwaggerService};
-use crate::utils::ShutdownCoordinator;
-use axum::extract::FromRef;
-use rmcp::transport::sse_server::App;
-use std::sync::Arc;
 use crate::models::DbPool;
+use crate::services::{EndpointService, SwaggerService};
+use axum::extract::FromRef;
+use rmcp::transport::sse_server::{App, ConnectionMsg};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub endpoint_service: Arc<EndpointService>,
     pub swagger_service: Arc<SwaggerService>,
     pub mcp_service: Arc<crate::services::mcp_service::McpService>,
-    pub shutdown_coordinator: ShutdownCoordinator,
     pub pool: DbPool,
+    pub connect_tx: tokio::sync::mpsc::UnboundedSender<ConnectionMsg>,
 }
 
 impl AppState {
@@ -19,15 +18,15 @@ impl AppState {
         endpoint_service: Arc<EndpointService>,
         swagger_service: Arc<SwaggerService>,
         mcp_service: Arc<crate::services::mcp_service::McpService>,
-        shutdown_coordinator: ShutdownCoordinator,
         pool: DbPool,
+        connect_tx: tokio::sync::mpsc::UnboundedSender<ConnectionMsg>,
     ) -> Self {
         Self {
             endpoint_service,
             swagger_service,
             mcp_service,
-            shutdown_coordinator,
-            pool
+            pool,
+            connect_tx,
         }
     }
 }

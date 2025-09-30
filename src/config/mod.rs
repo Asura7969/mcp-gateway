@@ -6,7 +6,6 @@ use std::env;
 pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
-    pub monitoring: MonitoringConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -20,12 +19,6 @@ pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
     pub mcp_call_max_connections: u32,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct MonitoringConfig {
-    pub enabled: bool,
-    pub metrics_path: String,
 }
 
 impl Settings {
@@ -62,10 +55,6 @@ impl Default for Settings {
                 url: "mysql://mcpuser:mcppassword@localhost:3306/mcp_gateway".to_string(),
                 max_connections: 5,
                 mcp_call_max_connections: 2,
-            },
-            monitoring: MonitoringConfig {
-                enabled: true,
-                metrics_path: "/metrics".to_string(),
             },
         }
     }

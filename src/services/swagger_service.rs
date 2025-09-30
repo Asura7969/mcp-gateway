@@ -1,6 +1,6 @@
 use crate::models::{
-    ApiDetail, ApiParameter, CreateEndpointRequest, McpConfig, SwaggerSpec,
-    SwaggerToMcpRequest, SwaggerToMcpResponse,
+    ApiDetail, ApiParameter, CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest,
+    SwaggerToMcpResponse,
 };
 use crate::services::EndpointService;
 use crate::utils::{generate_mcp_tools, schema_to_json_schema};
@@ -872,29 +872,29 @@ mod tests {
         let get_users = api_details.iter().find(|d| d.method == "GET").unwrap();
         assert_eq!(get_users.path, "/users");
         assert_eq!(get_users.summary, Some("获取用户列表".to_string()));
-        
+
         // 验证响应体包含数组类型字段
         assert!(get_users.response_schema.is_some());
         let response_schema = get_users.response_schema.as_ref().unwrap();
         let properties = response_schema["properties"].as_object().unwrap();
         assert!(properties.contains_key("users"));
-        
+
         let users_field = &properties["users"];
         assert_eq!(users_field["type"], "array");
         assert!(users_field["items"].as_object().is_some());
-        
+
         // 验证数组项的对象属性
         let item_properties = users_field["items"]["properties"].as_object().unwrap();
         assert!(item_properties.contains_key("id"));
         assert!(item_properties.contains_key("name"));
         assert!(item_properties.contains_key("profile"));
-        
+
         // 验证嵌套的对象字段
         let profile_field = &item_properties["profile"];
         assert_eq!(profile_field["type"], "object");
         let profile_properties = profile_field["properties"].as_object().unwrap();
         assert!(profile_properties.contains_key("skills"));
-        
+
         // 验证嵌套的数组字段
         let skills_field = &profile_properties["skills"];
         assert_eq!(skills_field["type"], "array");
@@ -904,18 +904,18 @@ mod tests {
         let create_user = api_details.iter().find(|d| d.method == "POST").unwrap();
         assert_eq!(create_user.path, "/users");
         assert_eq!(create_user.summary, Some("创建用户".to_string()));
-        
+
         // 验证请求体包含数组类型字段
         assert!(create_user.request_body_schema.is_some());
         let request_schema = create_user.request_body_schema.as_ref().unwrap();
         let req_properties = request_schema["properties"].as_object().unwrap();
         assert!(req_properties.contains_key("emails"));
         assert!(req_properties.contains_key("preferences"));
-        
+
         let emails_field = &req_properties["emails"];
         assert_eq!(emails_field["type"], "array");
         assert_eq!(emails_field["items"]["type"], "string");
-        
+
         let preferences_field = &req_properties["preferences"];
         assert_eq!(preferences_field["type"], "array");
         assert!(preferences_field["items"].as_object().is_some());

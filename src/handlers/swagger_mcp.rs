@@ -49,8 +49,9 @@ impl Adapter {
     fn get_endpoint_id(&self, context: &RequestContext<RoleServer>) -> Option<Uuid> {
         if let Some(http_request_part) = context.extensions.get::<axum::http::request::Parts>() {
             // let initialize_headers = &http_request_part.headers;
-            let initialize_uri = &http_request_part.uri;
-            if let Some(endpoint_id) = extract_endpoint_id(initialize_uri.to_string().as_str()) {
+            let uri = &http_request_part.uri;
+            tracing::info!(?uri, "get endpoint id");
+            if let Some(endpoint_id) = extract_endpoint_id(uri.to_string().as_str()) {
                 tracing::info!("get endpoint id: {}", endpoint_id);
                 return Some(Uuid::parse_str(endpoint_id.as_str()).unwrap());
             }
@@ -287,6 +288,7 @@ impl ServerHandler for Adapter {
                 .enable_tools()
                 .build(),
             server_info: Implementation::from_build_env(),
+            // todo: 替换成对应endpoint的描述
             instructions: Some("This server provides swagger http tools.".to_string()),
         }
     }

@@ -1,14 +1,10 @@
-use axum::{
-    extract::{Query},
-    http::StatusCode,
-    Json as JsonResponse,
-};
-use axum::extract::State;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, NaiveDateTime};
-use sqlx::Row;
 use crate::state::AppState;
 use crate::utils::get_china_time;
+use axum::extract::State;
+use axum::{extract::Query, http::StatusCode, Json as JsonResponse};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::Row;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConnectionInfo {
@@ -50,7 +46,7 @@ pub async fn get_endpoint_connections(
 ) -> Result<JsonResponse<Vec<ConnectionInfo>>, (StatusCode, String)> {
     // If endpoint_id is provided in query params, filter by it
     let endpoint_id = params.endpoint_id.clone();
-    
+
     let query_str = if let Some(ref _id) = endpoint_id {
         "SELECT id, endpoint_id, session_id, transport_type, connect_at, disconnect_at 
          FROM endpoint_session_logs 
@@ -80,7 +76,7 @@ pub async fn get_endpoint_connections(
         .map(|row| {
             let connect_at_naive: NaiveDateTime = row.get("connect_at");
             let disconnect_at_naive: NaiveDateTime = row.get("disconnect_at");
-            
+
             ConnectionInfo {
                 id: row.get("id"),
                 endpoint_id: row.get("endpoint_id"),
@@ -100,16 +96,14 @@ pub async fn get_endpoint_connection_count(
     Query(params): Query<ConnectionQueryParams>,
     State(app_state): State<AppState>,
 ) -> Result<JsonResponse<ConnectionCount>, (StatusCode, String)> {
-
     if let Some(endpoint_id) = params.endpoint_id {
         // Get count for specific endpoint
-        let row = sqlx::query(
-            "SELECT connect_num FROM endpoint_connection_counts WHERE endpoint_id = ?"
-        )
-        .bind(endpoint_id.clone())
-        .fetch_optional(&app_state.pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let row =
+            sqlx::query("SELECT connect_num FROM endpoint_connection_counts WHERE endpoint_id = ?")
+                .bind(endpoint_id.clone())
+                .fetch_optional(&app_state.pool)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         let count = if let Some(row) = row {
             row.get::<i64, _>("connect_num")
@@ -121,12 +115,12 @@ pub async fn get_endpoint_connection_count(
             endpoint_id: endpoint_id.clone(),
             connect_num: count,
         };
-        
+
         Ok(JsonResponse(result))
     } else {
         // Get total count for all endpoints
         let row = sqlx::query(
-            "SELECT COALESCE(SUM(connect_num), 0) as cnt FROM endpoint_connection_counts"
+            "SELECT COALESCE(SUM(connect_num), 0) as cnt FROM endpoint_connection_counts",
         )
         .fetch_one(&app_state.pool)
         .await
@@ -151,9 +145,9 @@ pub async fn get_time_series_connection_counts(
 ) -> Result<JsonResponse<Vec<TimeSeriesConnectionCount>>, (StatusCode, String)> {
     // For simplicity, we'll return the current connection counts for each endpoint
     // A more complete implementation would aggregate data over time intervals
-    
+
     let rows = sqlx::query(
-        "SELECT endpoint_id, connect_num FROM endpoint_connection_counts ORDER BY endpoint_id"
+        "SELECT endpoint_id, connect_num FROM endpoint_connection_counts ORDER BY endpoint_id",
     )
     .fetch_all(&app_state.pool)
     .await

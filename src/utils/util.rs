@@ -1,4 +1,4 @@
-use chrono::{Utc, FixedOffset};
+use chrono::{FixedOffset, Utc};
 
 /// 提取请求路径中endpoint
 pub fn extract_endpoint_id(url: &str) -> Option<String> {
@@ -15,7 +15,7 @@ pub fn extract_endpoint_id(url: &str) -> Option<String> {
 }
 
 fn stream_or_sse(url: &str) -> (bool, &str, &str) {
-    if url.contains("/sse") {
+    if url.contains("/sse") || url.contains("/message") {
         // .../sse
         (false, "endpointId=", "&")
     } else {

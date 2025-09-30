@@ -11,10 +11,6 @@ pub async fn create_pool(database_url: &str, _max_connections: u32) -> Result<Db
     Ok(pool)
 }
 
-pub async fn health_check(pool: &DbPool) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT 1").execute(pool).await.map(|_| ())
-}
-
 use std::sync::OnceLock;
 
 pub static DB_POOL: OnceLock<DbPool> = OnceLock::new();

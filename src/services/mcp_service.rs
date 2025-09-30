@@ -4,39 +4,8 @@ use crate::utils::{
 };
 use anyhow::{anyhow, Result};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct McpRequest {
-    pub jsonrpc: String,
-    pub id: Option<Value>,
-    pub method: String,
-    pub params: Option<Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct McpResponse {
-    pub jsonrpc: String,
-    pub id: Option<Value>,
-    pub result: Option<Value>,
-    pub error: Option<McpError>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct McpError {
-    pub code: i32,
-    pub message: String,
-    pub data: Option<Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct McpNotification {
-    pub jsonrpc: String,
-    pub method: String,
-    pub params: Option<Value>,
-}
 
 #[derive(Clone)]
 pub struct McpService {
@@ -241,24 +210,6 @@ impl McpService {
         .await?;
 
         Ok(endpoint)
-    }
-
-    async fn increment_connection_count(&self, endpoint_id: Uuid) -> Result<()> {
-        sqlx::query("UPDATE endpoints SET connection_count = connection_count + 1 WHERE id = ?")
-            .bind(endpoint_id.to_string())
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn decrement_connection_count(&self, endpoint_id: Uuid) -> Result<()> {
-        sqlx::query("UPDATE endpoints SET connection_count = GREATEST(0, connection_count - 1) WHERE id = ?")
-            .bind(endpoint_id.to_string())
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
     }
 
     pub async fn get_endpoints(&self) -> Result<Vec<Endpoint>> {
