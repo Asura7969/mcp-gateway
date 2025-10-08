@@ -24,7 +24,7 @@ mod tests {
             embedding_model: None,
             embedding_updated_at: None,
         };
-        
+
         assert_eq!(interface.path, "/api/users");
         assert_eq!(interface.method, "GET");
         assert_eq!(interface.summary, Some("Get Users".to_string()));
@@ -42,7 +42,7 @@ mod tests {
             enum_values: None,
             format: None,
         };
-        
+
         assert_eq!(param.name, "user_id");
         assert_eq!(param.param_type, "path");
         assert!(param.required);

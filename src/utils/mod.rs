@@ -5,7 +5,6 @@ use rmcp::transport::streamable_http_server::{SessionId, SessionManager};
 use std::future::Future;
 use std::sync::Arc;
 
-pub mod embedding;
 pub mod shutdown;
 pub mod swagger_util;
 pub mod util;

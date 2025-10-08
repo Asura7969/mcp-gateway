@@ -1,12 +1,12 @@
 mod config;
+mod error;
 mod handlers;
 mod middleware;
 mod models;
 mod services;
 mod state;
-mod utils;
-mod error;
 mod tests;
+mod utils;
 
 use axum::{
     routing::{get, post},
@@ -22,20 +22,20 @@ use tokio::net::TcpListener;
 use tokio::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::middleware::stream_requests_interceptor;
 use crate::models::DB_POOL;
-use crate::services::{McpService, SessionService};
+use crate::services::{EmbeddingService, McpService, SessionService};
 use crate::utils::MonitoredSessionManager;
 use config::Settings;
 use handlers::*;
 use middleware::{cors_layer, logging};
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use services::{EndpointService, SwaggerService, StartupLoaderService};
+use services::{EndpointService, StartupLoaderService, SwaggerService};
 use state::AppState;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tower::ServiceBuilder;
 use utils::shutdown_signal;
-use crate::middleware::stream_requests_interceptor;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -78,9 +78,15 @@ async fn main() -> anyhow::Result<()> {
         (*db_pool).clone(),
     )));
     let mcp_service = Arc::new(McpService::new((*db_pool).clone()));
-    
+
+    // Initialize EmbeddingService
+    let embedding_config = settings.to_embedding_config();
+    let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config)?);
+    tracing::info!("EmbeddingService initialized");
+
     // Create interface relation state
-    let interface_relation_state = InterfaceRelationState::new().await
+    let interface_relation_state = InterfaceRelationState::new(embedding_service.clone())
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
 
     // 自动加载endpoints表中的swagger信息到SurrealDB
@@ -89,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         endpoint_service.clone(),
         interface_relation_state.service.clone(),
     );
-    
+
     if let Err(e) = startup_loader.load_all_swagger_data().await {
         tracing::error!("自动加载swagger数据失败: {}", e);
         // 注意：这里不返回错误，允许应用继续启动，即使swagger数据加载失败
@@ -121,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
         endpoint_service,
         swagger_service,
         mcp_service.clone(),
+        embedding_service,
         (*db_pool).clone(),
         connect_tx,
     );
@@ -203,8 +210,8 @@ async fn main() -> anyhow::Result<()> {
                 .layer(axum::middleware::from_fn(logging::log_requests))
                 .layer(axum::middleware::from_fn_with_state(
                     app_state.clone(),
-                    stream_requests_interceptor)
-                )
+                    stream_requests_interceptor,
+                )),
         )
         .with_state(merge_state);
 

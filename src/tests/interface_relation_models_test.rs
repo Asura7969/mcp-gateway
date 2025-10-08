@@ -160,7 +160,7 @@ mod tests {
             domain: Some("user".to_string()),
             deprecated: false,
         };
-        
+
         assert_eq!(interface.path, "/api/users");
         assert_eq!(interface.method, "GET");
         assert_eq!(interface.name, "Get Users");
@@ -177,11 +177,11 @@ mod tests {
             description: Some("User service calls auth service".to_string()),
             strength: 8,
         };
-        
+
         assert_eq!(dependency.from_interface, "GET:/api/users");
         assert_eq!(dependency.to_interface, "GET:/api/users/{id}");
         assert_eq!(dependency.strength, 8);
-        
+
         match dependency.dependency_type {
             DependencyType::DataDependency => assert!(true),
             _ => assert!(false, "Expected DataDependency"),
@@ -199,7 +199,7 @@ mod tests {
             example: Some("123".to_string()),
             nested_fields: None,
         };
-        
+
         assert_eq!(param.name, "user_id");
         assert_eq!(param.param_type, "path");
         assert!(param.required);
@@ -214,7 +214,7 @@ mod tests {
             example: Some("123".to_string()),
             nested_fields: None,
         };
-        
+
         assert_eq!(response_field.name, "id");
         assert_eq!(response_field.data_type, "integer");
     }
@@ -227,7 +227,7 @@ mod tests {
             mapping_type: "direct".to_string(),
             transform_rule: None,
         };
-        
+
         assert_eq!(mapping.source_field, "response.data.user_id");
         assert_eq!(mapping.target_field, "parameters.id");
         assert_eq!(mapping.mapping_type, "direct");
@@ -241,14 +241,14 @@ mod tests {
             project_id: "test_project".to_string(),
             version: Some("1.0.0".to_string()),
         };
-        
+
         let query_request = QueryInterfaceRequest {
             query: "user".to_string(),
             project_id: Some("test_project".to_string()),
             max_results: Some(10),
             include_dependencies: Some(true),
         };
-        
+
         assert_eq!(query_request.query, "user");
         assert_eq!(query_request.max_results, Some(10));
         assert_eq!(store_request.project_id, "test_project");
@@ -264,21 +264,21 @@ mod tests {
             DependencyType::ValidationDependency,
             DependencyType::Related,
         ];
-        
+
         assert_eq!(types.len(), 6);
-        
+
         // 测试序列化和反序列化
         for dep_type in types {
             let serialized = serde_json::to_string(&dep_type).unwrap();
             let deserialized: DependencyType = serde_json::from_str(&serialized).unwrap();
-            
+
             match (dep_type, deserialized) {
-                (DependencyType::DataDependency, DependencyType::DataDependency) => {},
-                (DependencyType::BusinessFlow, DependencyType::BusinessFlow) => {},
-                (DependencyType::ParameterPassing, DependencyType::ParameterPassing) => {},
-                (DependencyType::AuthDependency, DependencyType::AuthDependency) => {},
-                (DependencyType::ValidationDependency, DependencyType::ValidationDependency) => {},
-                (DependencyType::Related, DependencyType::Related) => {},
+                (DependencyType::DataDependency, DependencyType::DataDependency) => {}
+                (DependencyType::BusinessFlow, DependencyType::BusinessFlow) => {}
+                (DependencyType::ParameterPassing, DependencyType::ParameterPassing) => {}
+                (DependencyType::AuthDependency, DependencyType::AuthDependency) => {}
+                (DependencyType::ValidationDependency, DependencyType::ValidationDependency) => {}
+                (DependencyType::Related, DependencyType::Related) => {}
                 _ => panic!("Serialization/deserialization mismatch"),
             }
         }
@@ -331,17 +331,17 @@ mod tests {
             domain: Some("user".to_string()),
             deprecated: false,
         };
-        
+
         assert_eq!(interface.parameters.len(), 2);
         assert_eq!(interface.responses.len(), 2);
         assert_eq!(interface.tags.len(), 2);
-        
+
         // 验证路径参数
         let path_param = &interface.parameters[0];
         assert_eq!(path_param.name, "id");
         assert_eq!(path_param.param_type, "path");
         assert!(path_param.required);
-        
+
         // 验证查询参数
         let query_param = &interface.parameters[1];
         assert_eq!(query_param.name, "include_profile");

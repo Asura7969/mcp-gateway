@@ -6,6 +6,7 @@ use std::env;
 pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
+    pub embedding: Option<EmbeddingSettings>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -19,6 +20,61 @@ pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
     pub mcp_call_max_connections: u32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EmbeddingSettings {
+    pub model_type: String,
+    pub dimension: usize,
+    pub aliyun: Option<AliyunSettings>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AliyunSettings {
+    pub api_key: String,
+    pub model: String,
+    pub endpoint: String,
+    pub workspace_id: Option<String>,
+}
+
+/// 向量化配置
+#[derive(Debug, Clone)]
+pub struct EmbeddingConfig {
+    /// 向量维度
+    pub dimension: usize,
+    /// 模型名称
+    pub model_name: String,
+    /// API 端点
+    pub api_endpoint: Option<String>,
+    /// API 密钥
+    pub api_key: Option<String>,
+    /// 阿里云百炼配置
+    pub aliyun_config: Option<AliyunBailianConfig>,
+}
+
+/// 阿里云百炼配置
+#[derive(Debug, Clone)]
+pub struct AliyunBailianConfig {
+    /// API Key
+    pub api_key: String,
+    /// 模型名称
+    pub model: String,
+    /// API 端点
+    pub endpoint: String,
+    /// 工作空间 ID
+    pub workspace_id: Option<String>,
+}
+
+impl Default for EmbeddingConfig {
+    fn default() -> Self {
+        Self {
+            dimension: 384,
+            model_name: "simple".to_string(),
+            api_endpoint: None,
+            api_key: None,
+            aliyun_config: None,
+        }
+    }
 }
 
 impl Settings {
@@ -42,6 +98,86 @@ impl Settings {
 
         s.try_deserialize()
     }
+
+    /// 从环境变量创建设置
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let mut settings = Self::default();
+
+        // 从环境变量读取数据库配置
+        if let Ok(database_url) = env::var("DATABASE_URL") {
+            settings.database.url = database_url;
+        }
+
+        // 从环境变量读取服务器配置
+        if let Ok(host) = env::var("SERVER_HOST") {
+            settings.server.host = host;
+        }
+        if let Ok(port) = env::var("SERVER_PORT") {
+            if let Ok(port_num) = port.parse::<u16>() {
+                settings.server.port = port_num;
+            }
+        }
+
+        // 从环境变量读取向量模型配置
+        let model_type = env::var("EMBEDDING_MODEL_TYPE").unwrap_or_else(|_| "simple".to_string());
+        let dimension = env::var("EMBEDDING_DIMENSION")
+            .unwrap_or_else(|_| "384".to_string())
+            .parse::<usize>()
+            .unwrap_or(384);
+
+        let aliyun_config = if model_type == "aliyun-bailian" {
+            if let (Ok(api_key), Ok(model), Ok(endpoint)) = (
+                env::var("ALIYUN_BAILIAN_API_KEY"),
+                env::var("ALIYUN_BAILIAN_MODEL"),
+                env::var("ALIYUN_BAILIAN_ENDPOINT"),
+            ) {
+                Some(AliyunSettings {
+                    api_key,
+                    model,
+                    endpoint,
+                    workspace_id: env::var("ALIYUN_BAILIAN_WORKSPACE_ID").ok(),
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        settings.embedding = Some(EmbeddingSettings {
+            model_type,
+            dimension,
+            aliyun: aliyun_config,
+        });
+
+        Ok(settings)
+    }
+
+    /// 转换为 EmbeddingConfig
+    pub fn to_embedding_config(&self) -> EmbeddingConfig {
+        if let Some(embedding_settings) = &self.embedding {
+            let aliyun_config =
+                embedding_settings
+                    .aliyun
+                    .as_ref()
+                    .map(|aliyun| AliyunBailianConfig {
+                        api_key: aliyun.api_key.clone(),
+                        model: aliyun.model.clone(),
+                        endpoint: aliyun.endpoint.clone(),
+                        workspace_id: aliyun.workspace_id.clone(),
+                    });
+
+            EmbeddingConfig {
+                dimension: embedding_settings.dimension,
+                model_name: embedding_settings.model_type.clone(),
+                api_endpoint: None,
+                api_key: None,
+                aliyun_config,
+            }
+        } else {
+            EmbeddingConfig::default()
+        }
+    }
 }
 
 impl Default for Settings {
@@ -56,6 +192,11 @@ impl Default for Settings {
                 max_connections: 5,
                 mcp_call_max_connections: 2,
             },
+            embedding: Some(EmbeddingSettings {
+                model_type: "simple".to_string(),
+                dimension: 384,
+                aliyun: None,
+            }),
         }
     }
 }

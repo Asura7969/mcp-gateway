@@ -1,6 +1,5 @@
 use crate::models::{
-    CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest,
-    SwaggerToMcpResponse,
+    CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest, SwaggerToMcpResponse,
 };
 use crate::services::EndpointService;
 use crate::utils::generate_mcp_tools;
@@ -157,8 +156,8 @@ impl SwaggerService {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::generate_api_details;
     use super::*;
+    use crate::utils::generate_api_details;
 
     fn create_test_swagger_spec() -> SwaggerSpec {
         serde_json::from_str(

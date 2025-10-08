@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use surrealdb::RecordId;
-use surrealdb::sql::Datetime;
-use std::collections::HashMap;
-use utoipa::ToSchema;
 use crate::models::endpoint::ApiDetail;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use surrealdb::sql::Datetime;
+use surrealdb::RecordId;
+use utoipa::ToSchema;
 
 /// 接口节点 - 表示一个API接口，基于ApiDetail结构设计
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -78,15 +78,31 @@ impl From<ApiDetail> for ApiInterface {
             summary: api_detail.summary,
             description: api_detail.description,
             operation_id: api_detail.operation_id,
-            path_params: api_detail.path_params.into_iter().map(|p| p.into()).collect(),
-            query_params: api_detail.query_params.into_iter().map(|p| p.into()).collect(),
-            header_params: api_detail.header_params.into_iter().map(|p| p.into()).collect(),
+            path_params: api_detail
+                .path_params
+                .into_iter()
+                .map(|p| p.into())
+                .collect(),
+            query_params: api_detail
+                .query_params
+                .into_iter()
+                .map(|p| p.into())
+                .collect(),
+            header_params: api_detail
+                .header_params
+                .into_iter()
+                .map(|p| p.into())
+                .collect(),
             body_params: Vec::new(), // endpoint::ApiDetail没有body_params字段
-            request_schema: api_detail.request_body_schema.map(|s| serde_json::to_string(&s).unwrap_or_default()),
-            response_schema: Some(serde_json::to_string(&api_detail.response_schema).unwrap_or_default()),
+            request_schema: api_detail
+                .request_body_schema
+                .map(|s| serde_json::to_string(&s).unwrap_or_default()),
+            response_schema: Some(
+                serde_json::to_string(&api_detail.response_schema).unwrap_or_default(),
+            ),
             tags: Vec::new(), // 需要从swagger spec中提取
             domain: None,
-            deprecated: false, // 需要从swagger spec中提取
+            deprecated: false,         // 需要从swagger spec中提取
             service_description: None, // 需要从swagger spec中提取
             embedding: None,
             embedding_model: None,
@@ -102,14 +118,13 @@ impl From<crate::models::endpoint::ApiParameter> for ApiParameter {
             param_type: param.param_type,
             required: param.required,
             description: param.description,
-            example: None, // endpoint::ApiParameter没有example字段
+            example: None,       // endpoint::ApiParameter没有example字段
             default_value: None, // endpoint::ApiParameter没有default_value字段
-            enum_values: None, // endpoint::ApiParameter没有enum_values字段
-            format: None, // endpoint::ApiParameter没有format字段
+            enum_values: None,   // endpoint::ApiParameter没有enum_values字段
+            format: None,        // endpoint::ApiParameter没有format字段
         }
     }
 }
-
 
 /// 带评分的接口结果
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -126,7 +141,6 @@ pub struct InterfaceWithScore {
     pub search_type: String,
 }
 
-
 /// SurrealDB中的接口记录
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InterfaceRecord {
@@ -138,7 +152,6 @@ pub struct InterfaceRecord {
     pub created_at: Datetime,
     pub updated_at: Datetime,
 }
-
 
 /// 错误类型
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

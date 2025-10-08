@@ -22,13 +22,11 @@ pub async fn stream_requests_interceptor(
             // 截取endpoint_id
             let (_stream_prefix, endpoint_id) = uri.path().split_at(8);
             // 创建连接
-            if let Err(e) = state
-                .connect_tx
-                .send(ConnectionMsg::Connect(
-                    endpoint_id.to_string(),
-                    session_id.to_string().into(),
-                    McpType::STREAMABLE,
-                )) {
+            if let Err(e) = state.connect_tx.send(ConnectionMsg::Connect(
+                endpoint_id.to_string(),
+                session_id.to_string().into(),
+                McpType::STREAMABLE,
+            )) {
                 tracing::warn!("Failed to send connection msg: {}", e);
             };
         }

@@ -1,16 +1,17 @@
 use crate::models::interface_relation::*;
 use crate::models::swagger::SwaggerSpec;
-use crate::utils::embedding::EmbeddingService;
+use crate::services::EmbeddingService;
+use crate::utils::generate_api_details;
 use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use surrealdb::engine::local::{Db, Mem};
 use surrealdb::sql::Datetime;
 use surrealdb::Surreal;
-use crate::utils::generate_api_details;
 
 /// 解析Swagger请求
 #[derive(Debug, Clone)]
@@ -48,19 +49,17 @@ pub struct InterfaceWithMeta {
 /// 接口关系服务 - 重新设计用于swagger解析和向量搜索
 pub struct InterfaceRelationService {
     db: Surreal<Db>,
-    embedding_service: EmbeddingService,
+    embedding_service: Arc<EmbeddingService>,
 }
 
 impl InterfaceRelationService {
     /// 创建新的服务实例
-    pub async fn new() -> Result<Self> {
+    pub async fn new(embedding_service: Arc<EmbeddingService>) -> Result<Self> {
         let db = Surreal::new::<Mem>(()).await?;
         db.use_ns("interface_relation").use_db("main").await?;
-        
-        let embedding_service = EmbeddingService::default();
-        
-        let service = Self { 
-            db, 
+
+        let service = Self {
+            db,
             embedding_service,
         };
         service.init_schema().await?;
@@ -70,9 +69,7 @@ impl InterfaceRelationService {
     /// 初始化数据库schema
     async fn init_schema(&self) -> Result<()> {
         // 创建接口表
-        self.db
-            .query("DEFINE TABLE interface SCHEMAFULL")
-            .await?;
+        self.db.query("DEFINE TABLE interface SCHEMAFULL").await?;
 
         // 定义接口表字段 - 基于新的ApiInterface结构
         self.db
@@ -160,10 +157,10 @@ impl InterfaceRelationService {
     pub async fn parse_and_store_swagger(&self, request: ParseSwaggerRequest) -> Result<()> {
         // 解析 Swagger JSON
         let swagger_spec: SwaggerSpec = serde_json::from_value(request.swagger_json)?;
-        
+
         // 直接生成 API 详情，避免依赖 EndpointService
         let api_details = generate_api_details(&swagger_spec)?;
-        
+
         // 转换为 ApiInterface 并存储
         let interfaces: Vec<ApiInterface> = api_details
             .into_iter()
@@ -175,14 +172,20 @@ impl InterfaceRelationService {
                 interface
             })
             .collect();
-        
-        self.store_interfaces(&interfaces, &request.project_id, None).await?;
-        
+
+        self.store_interfaces(&interfaces, &request.project_id, None)
+            .await?;
+
         Ok(())
     }
 
     /// 存储接口到数据库
-    async fn store_interfaces(&self, interfaces: &[ApiInterface], project_id: &str, _version: Option<&str>) -> Result<u32> {
+    async fn store_interfaces(
+        &self,
+        interfaces: &[ApiInterface],
+        project_id: &str,
+        _version: Option<&str>,
+    ) -> Result<u32> {
         let mut stored_count = 0;
 
         for interface in interfaces {
@@ -211,7 +214,12 @@ impl InterfaceRelationService {
                 updated_at: now,
             };
 
-            match self.db.create::<Option<InterfaceWithMeta>>("interface").content(interface_with_meta).await {
+            match self
+                .db
+                .create::<Option<InterfaceWithMeta>>("interface")
+                .content(interface_with_meta)
+                .await
+            {
                 Ok(_) => stored_count += 1,
                 Err(e) => {
                     tracing::error!("Failed to store interface {}: {}", interface.path, e);
@@ -223,7 +231,10 @@ impl InterfaceRelationService {
     }
 
     /// 搜索接口 - 支持关键词和向量搜索
-    pub async fn search_interfaces(&self, request: InterfaceSearchRequest) -> Result<InterfaceSearchResponse> {
+    pub async fn search_interfaces(
+        &self,
+        request: InterfaceSearchRequest,
+    ) -> Result<InterfaceSearchResponse> {
         let start_time = Instant::now();
         let max_results = request.max_results.unwrap_or(10);
         let enable_vector_search = request.enable_vector_search.unwrap_or(false);
@@ -239,20 +250,19 @@ impl InterfaceRelationService {
                     max_results,
                     vector_weight,
                     similarity_threshold,
-                ).await?
-            },
+                )
+                .await?
+            }
             (true, false) => {
                 // 纯向量搜索
-                self.search_interfaces_by_vector(
-                    &request.query,
-                    max_results,
-                    similarity_threshold,
-                ).await?
-            },
+                self.search_interfaces_by_vector(&request.query, max_results, similarity_threshold)
+                    .await?
+            }
             (false, true) => {
                 // 纯关键词搜索
-                self.search_interfaces_by_keywords(&request.query, max_results).await?
-            },
+                self.search_interfaces_by_keywords(&request.query, max_results)
+                    .await?
+            }
             (false, false) => {
                 // 两种搜索都禁用，返回空结果
                 Vec::new()
@@ -272,8 +282,9 @@ impl InterfaceRelationService {
             (true, false) => "vector",
             (false, true) => "keyword",
             (false, false) => "none",
-        }.to_string();
-        
+        }
+        .to_string();
+
         let total_count = interfaces.len() as u32;
 
         Ok(InterfaceSearchResponse {
@@ -291,7 +302,7 @@ impl InterfaceRelationService {
         max_results: u32,
     ) -> Result<Vec<InterfaceWithScore>> {
         let _keywords: Vec<&str> = query.split_whitespace().collect();
-        
+
         // 使用SurrealDB的全文搜索功能
         let search_query = format!(
             "SELECT * FROM interface WHERE 
@@ -302,17 +313,13 @@ impl InterfaceRelationService {
             query, query, query, query
         );
 
-        let interfaces: Vec<InterfaceRecord> = self
-            .db
-            .query(&search_query)
-            .await?
-            .take(0)?;
+        let interfaces: Vec<InterfaceRecord> = self.db.query(&search_query).await?.take(0)?;
 
         let mut results = Vec::new();
         for record in interfaces {
             let score = self.calculate_match_score(&record.interface, query);
             let match_reason = self.get_match_reason(&record.interface, query);
-            
+
             results.push(InterfaceWithScore {
                 interface: record.interface,
                 score,
@@ -338,7 +345,7 @@ impl InterfaceRelationService {
     ) -> Result<Vec<InterfaceWithScore>> {
         // 1. 生成查询文本的向量
         let query_embedding = self.embedding_service.embed_text(query).await?;
-        
+
         // 2. 获取所有有向量嵌入的接口
         let interfaces_with_embeddings: Vec<InterfaceRecord> = self
             .db
@@ -352,10 +359,10 @@ impl InterfaceRelationService {
         for record in interfaces_with_embeddings {
             if let Some(embedding) = &record.interface.embedding {
                 let similarity = self.calculate_cosine_similarity(&query_embedding, embedding);
-                
+
                 if similarity >= similarity_threshold {
                     let match_reason = format!("向量相似度: {:.3}", similarity);
-                    
+
                     results.push(InterfaceWithScore {
                         interface: record.interface,
                         score: similarity as f64,
@@ -375,9 +382,19 @@ impl InterfaceRelationService {
     }
 
     /// 混合搜索：关键词 + 向量
-    async fn hybrid_search(&self, query: &str, max_results: u32, vector_weight: f32, similarity_threshold: f32) -> Result<Vec<InterfaceWithScore>> {
-        let keyword_results = self.search_interfaces_by_keywords(query, max_results * 2).await?;
-        let vector_results = self.search_interfaces_by_vector(query, max_results * 2, similarity_threshold).await?;
+    async fn hybrid_search(
+        &self,
+        query: &str,
+        max_results: u32,
+        vector_weight: f32,
+        similarity_threshold: f32,
+    ) -> Result<Vec<InterfaceWithScore>> {
+        let keyword_results = self
+            .search_interfaces_by_keywords(query, max_results * 2)
+            .await?;
+        let vector_results = self
+            .search_interfaces_by_vector(query, max_results * 2, similarity_threshold)
+            .await?;
 
         let mut combined_results = HashMap::new();
 
@@ -390,10 +407,11 @@ impl InterfaceRelationService {
         // 合并向量搜索结果，调整评分
         for mut result in vector_results {
             let key = format!("{}:{}", result.interface.path, result.interface.method);
-            
+
             if let Some(existing) = combined_results.get_mut(&key) {
                 // 混合评分：关键词权重 + 向量权重
-                existing.score = existing.score * (1.0 - vector_weight as f64) + result.score * vector_weight as f64;
+                existing.score = existing.score * (1.0 - vector_weight as f64)
+                    + result.score * vector_weight as f64;
                 existing.search_type = "hybrid".to_string();
                 existing.similarity_score = result.similarity_score;
             } else {
@@ -403,7 +421,11 @@ impl InterfaceRelationService {
         }
 
         let mut final_results: Vec<InterfaceWithScore> = combined_results.into_values().collect();
-        final_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         final_results.truncate(max_results as usize);
 
         Ok(final_results)
@@ -530,7 +552,10 @@ impl InterfaceRelationService {
 
             // 标签过滤
             if let Some(filter_tags) = &filters.tags {
-                if !filter_tags.iter().any(|tag| item.interface.tags.contains(tag)) {
+                if !filter_tags
+                    .iter()
+                    .any(|tag| item.interface.tags.contains(tag))
+                {
                     return false;
                 }
             }
@@ -562,10 +587,13 @@ impl InterfaceRelationService {
 
     /// 获取项目的所有接口
     pub async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<ApiInterface>> {
-        let query_str = format!("SELECT * FROM interface WHERE project_id = '{}'", project_id);
+        let query_str = format!(
+            "SELECT * FROM interface WHERE project_id = '{}'",
+            project_id
+        );
         let mut response = self.db.query(&query_str).await?;
         let records: Vec<InterfaceRecord> = response.take(0)?;
-        
+
         Ok(records.into_iter().map(|r| r.interface).collect())
     }
 
@@ -573,7 +601,10 @@ impl InterfaceRelationService {
     pub async fn delete_project_data(&self, project_id: &str) -> Result<String> {
         let query_str = format!("DELETE FROM interface WHERE project_id = '{}'", project_id);
         self.db.query(&query_str).await?;
-        
-        Ok(format!("Deleted all interfaces for project: {}", project_id))
+
+        Ok(format!(
+            "Deleted all interfaces for project: {}",
+            project_id
+        ))
     }
 }

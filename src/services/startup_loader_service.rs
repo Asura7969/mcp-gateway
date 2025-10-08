@@ -1,5 +1,8 @@
 use crate::models::endpoint::Endpoint;
-use crate::services::{EndpointService, interface_relation_service::{InterfaceRelationService, ParseSwaggerRequest}};
+use crate::services::{
+    interface_relation_service::{InterfaceRelationService, ParseSwaggerRequest},
+    EndpointService,
+};
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -50,10 +53,7 @@ impl StartupLoaderService {
             match self.process_endpoint_swagger(&endpoint).await {
                 Ok(()) => {
                     success_count += 1;
-                    info!(
-                        "成功处理endpoint: {} (ID: {})",
-                        endpoint.name, endpoint.id
-                    );
+                    info!("成功处理endpoint: {} (ID: {})", endpoint.name, endpoint.id);
                 }
                 Err(e) => {
                     error_count += 1;
@@ -86,7 +86,8 @@ impl StartupLoaderService {
         }
 
         // 解析swagger JSON
-        let swagger_json: serde_json::Value = match serde_json::from_str(&endpoint.swagger_content) {
+        let swagger_json: serde_json::Value = match serde_json::from_str(&endpoint.swagger_content)
+        {
             Ok(json) => json,
             Err(e) => {
                 error!("解析endpoint {} 的swagger JSON失败: {}", endpoint.name, e);
@@ -101,10 +102,17 @@ impl StartupLoaderService {
             project_id: project_id.clone(),
         };
 
-        info!("Processing endpoint: {}, project_id: {}", endpoint.name, project_id);
+        info!(
+            "Processing endpoint: {}, project_id: {}",
+            endpoint.name, project_id
+        );
 
         // 调用interface_relation_service的parse_and_store_swagger方法
-        match self.interface_relation_service.parse_and_store_swagger(request).await {
+        match self
+            .interface_relation_service
+            .parse_and_store_swagger(request)
+            .await
+        {
             Ok(_) => {
                 info!("Endpoint {} swagger解析成功", endpoint.name);
                 Ok(())

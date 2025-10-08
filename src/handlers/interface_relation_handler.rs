@@ -1,5 +1,6 @@
 use crate::models::interface_relation::*;
 use crate::services::interface_relation_service::{InterfaceRelationService, ParseSwaggerRequest};
+use crate::services::EmbeddingService;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -18,8 +19,10 @@ pub struct InterfaceRelationState {
 }
 
 impl InterfaceRelationState {
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let service = Arc::new(InterfaceRelationService::new().await?);
+    pub async fn new(
+        embedding_service: Arc<EmbeddingService>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let service = Arc::new(InterfaceRelationService::new(embedding_service).await?);
         Ok(Self { service })
     }
 }
@@ -27,29 +30,20 @@ impl InterfaceRelationState {
 /// 创建接口关系路由
 pub fn create_interface_relation_routes() -> Router<InterfaceRelationState> {
     Router::new()
-        .route("/api/interface-relations/swagger/parse", post(parse_swagger_json))
+        .route(
+            "/api/interface-relations/swagger/parse",
+            post(parse_swagger_json),
+        )
         .route("/api/interface-relations/search", post(search_interfaces))
-        .route("/api/interface-relations/projects/{project_id}", delete(delete_project_data))
+        .route(
+            "/api/interface-relations/projects/{project_id}",
+            delete(delete_project_data),
+        )
 }
 
-
-
 /// 删除项目数据
-/// 
+///
 /// 删除指定项目的所有接口和依赖关系数据
-#[utoipa::path(
-    delete,
-    path = "/api/interface-relations/projects/{project_id}",
-    params(
-        ("project_id" = String, Path, description = "项目ID")
-    ),
-    responses(
-        (status = 200, description = "删除成功", body = String),
-        (status = 404, description = "项目不存在", body = InterfaceRelationError),
-        (status = 500, description = "服务器内部错误", body = InterfaceRelationError)
-    ),
-    tag = "Interface Relations"
-)]
 pub async fn delete_project_data(
     State(state): State<InterfaceRelationState>,
     Path(project_id): Path<String>,
@@ -91,22 +85,9 @@ pub async fn delete_project_data(
     }
 }
 
-
-
 /// 解析Swagger JSON数据
-/// 
+///
 /// 接收Swagger JSON格式数据，解析其中的HTTP接口信息并存储到数据库
-#[utoipa::path(
-    post,
-    path = "/api/interface-relations/swagger/parse",
-    request_body = SwaggerParseRequest,
-    responses(
-        (status = 200, description = "解析成功", body = SwaggerParseResponse),
-        (status = 400, description = "请求参数错误", body = InterfaceRelationError),
-        (status = 500, description = "服务器内部错误", body = InterfaceRelationError)
-    ),
-    tag = "Interface Relations"
-)]
 pub async fn parse_swagger_json(
     State(state): State<InterfaceRelationState>,
     Json(request): Json<SwaggerParseRequest>,
@@ -135,9 +116,13 @@ pub async fn parse_swagger_json(
     match state.service.parse_and_store_swagger(service_request).await {
         Ok(_) => {
             let processing_time = start_time.elapsed().as_millis() as u64;
-            
+
             // 获取项目接口数量作为存储数量的估算
-            let stored_count = match state.service.get_project_interfaces(&request.project_id).await {
+            let stored_count = match state
+                .service
+                .get_project_interfaces(&request.project_id)
+                .await
+            {
                 Ok(interfaces) => interfaces.len() as u32,
                 Err(_) => 0,
             };
@@ -173,19 +158,8 @@ pub async fn parse_swagger_json(
 }
 
 /// 搜索接口信息
-/// 
+///
 /// 通过关键词向量或完全匹配方式检索相关接口信息
-#[utoipa::path(
-    post,
-    path = "/api/interface-relations/search",
-    request_body = InterfaceSearchRequest,
-    responses(
-        (status = 200, description = "搜索成功", body = InterfaceSearchResponse),
-        (status = 400, description = "请求参数错误", body = InterfaceRelationError),
-        (status = 500, description = "服务器内部错误", body = InterfaceRelationError)
-    ),
-    tag = "Interface Relations"
-)]
 pub async fn search_interfaces(
     State(state): State<InterfaceRelationState>,
     Json(request): Json<InterfaceSearchRequest>,

@@ -3,7 +3,6 @@ use anyhow::anyhow;
 use serde_json::Value;
 use uuid::Uuid;
 
-
 /// Generate API details from swagger spec
 pub fn generate_api_details(spec: &SwaggerSpec) -> anyhow::Result<Vec<ApiDetail>> {
     let mut api_details = Vec::new();
@@ -25,12 +24,14 @@ pub fn generate_api_details(spec: &SwaggerSpec) -> anyhow::Result<Vec<ApiDetail>
             api_details.push(create_api_detail("PUT", path, operation, spec, &base_url)?);
         }
         if let Some(operation) = &path_item.delete {
-            api_details
-                .push(create_api_detail("DELETE", path, operation, spec, &base_url)?);
+            api_details.push(create_api_detail(
+                "DELETE", path, operation, spec, &base_url,
+            )?);
         }
         if let Some(operation) = &path_item.patch {
-            api_details
-                .push(create_api_detail("PATCH", path, operation, spec, &base_url)?);
+            api_details.push(create_api_detail(
+                "PATCH", path, operation, spec, &base_url,
+            )?);
         }
     }
 
