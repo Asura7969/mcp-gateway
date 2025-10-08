@@ -33,14 +33,9 @@ prometheus = "0.13"
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 
-# URL parsing
-url = "2.5"
-
 # UUID
 uuid = { version = "1.0", features = ["v4", "serde"] }
 rust_decimal = { version = "1.35", features = ["serde"] }
-
-regex = "1.0"
 
 # Error handling
 anyhow = "1.0"
@@ -56,18 +51,6 @@ utoipa-swagger-ui = { version = "8.0", features = ["axum", "vendored"] }
 # Async utilities
 futures = "0.3"
 tokio-util = { version = "0.7", features = ["io"] }
-tokio-stream = "0.1"
-bytes = "1.0"
-
-# Signal handling for graceful shutdown
-tokio-signal = "0.2"
-
-# Additional features for MCP transports
-tokio-process = "0.2"
-byteorder = "1.5"
-
-# Lazy static initialization
-lazy_static = "1.4"
 
 # RMCP for MCP protocol implementation
 #rmcp = { version = "0.6.4", features = [
@@ -96,27 +79,22 @@ rmcp = { git = "https://github.com/Asura7969/rust-sdk.git", branch = "feature-v0
     "schemars",
 ] }
 
+# db
+surrealdb = {version = "2.3.10", features = ["kv-mem", "protocol-ws", "protocol-http"]}
+
 async-trait = "0.1"
 
 once_cell = "1.21.3"
-
-http-body-util = "0.1.0"
 
 dashmap = "6.1.0"
 
 [dev-dependencies]
 # Testing framework
 tokio-test = "0.4"
-httpmock = "0.7"
 serde_json = "1.0"
-tempfile = "3.0"
-wiremock = "0.6"
-http-body-util = "0.1"
 
 # Test utilities
 once_cell = "1.19"
-test-log = "0.2"
-env_logger = "0.11"
 
 # Async testing
 tokio = { version = "1.0", features = ["test-util", "macros"] }
@@ -124,8 +102,4 @@ tokio = { version = "1.0", features = ["test-util", "macros"] }
 # HTTP testing
 axum-test = "15.0"
 hyper = { version = "1.0", features = ["full"] }
-
-# WebSocket testing
-tokio-tungstenite = "0.24"
-futures-util = "0.3"
 

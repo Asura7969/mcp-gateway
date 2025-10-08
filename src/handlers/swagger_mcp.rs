@@ -50,7 +50,6 @@ impl Adapter {
         if let Some(http_request_part) = context.extensions.get::<axum::http::request::Parts>() {
             // let initialize_headers = &http_request_part.headers;
             let uri = &http_request_part.uri;
-            tracing::info!(?uri, "get endpoint id");
             if let Some(endpoint_id) = extract_endpoint_id(uri.to_string().as_str()) {
                 tracing::info!("get endpoint id: {}", endpoint_id);
                 return Some(Uuid::parse_str(endpoint_id.as_str()).unwrap());

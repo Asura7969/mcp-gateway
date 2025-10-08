@@ -21,59 +21,6 @@ impl McpService {
         }
     }
 
-    fn generate_tools_from_swagger(
-        swagger_spec: &crate::models::SwaggerSpec,
-    ) -> Result<Vec<Value>> {
-        let mut tools = Vec::new();
-
-        for (path, path_item) in &swagger_spec.paths {
-            let methods = [
-                ("GET", &path_item.get),
-                ("POST", &path_item.post),
-                ("PUT", &path_item.put),
-                ("DELETE", &path_item.delete),
-                ("PATCH", &path_item.patch),
-            ];
-
-            for (method, operation_opt) in methods {
-                if let Some(operation) = operation_opt {
-                    // Use consistent naming without random UUID
-                    let tool_name = operation.operation_id.clone().unwrap_or_else(|| {
-                        format!(
-                            "{}_{}_api",
-                            method.to_lowercase(),
-                            path.replace('/', "_")
-                                .replace('{', "")
-                                .replace('}', "")
-                                .trim_start_matches('_')
-                        )
-                    });
-
-                    let description = operation
-                        .summary
-                        .clone()
-                        .or_else(|| operation.description.clone())
-                        .unwrap_or_else(|| format!("{} {}", method, path));
-
-                    // Build input schema (simplified)
-                    let input_schema = serde_json::json!({
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    });
-
-                    tools.push(serde_json::json!({
-                        "name": tool_name,
-                        "description": description,
-                        "inputSchema": input_schema
-                    }));
-                }
-            }
-        }
-
-        Ok(tools)
-    }
-
     pub async fn execute_tool_call(
         &self,
         endpoint: &Endpoint,

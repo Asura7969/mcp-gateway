@@ -5,6 +5,8 @@ mod models;
 mod services;
 mod state;
 mod utils;
+mod error;
+mod tests;
 
 use axum::{
     routing::{get, post},
@@ -28,7 +30,7 @@ use handlers::*;
 use middleware::{cors_layer, logging};
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use services::{EndpointService, SwaggerService};
+use services::{EndpointService, SwaggerService, StartupLoaderService};
 use state::AppState;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tower::ServiceBuilder;
@@ -76,6 +78,25 @@ async fn main() -> anyhow::Result<()> {
         (*db_pool).clone(),
     )));
     let mcp_service = Arc::new(McpService::new((*db_pool).clone()));
+    
+    // Create interface relation state
+    let interface_relation_state = InterfaceRelationState::new().await
+        .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
+
+    // 自动加载endpoints表中的swagger信息到SurrealDB
+    tracing::info!("开始自动加载endpoints表中的swagger信息...");
+    let startup_loader = StartupLoaderService::new(
+        endpoint_service.clone(),
+        interface_relation_state.service.clone(),
+    );
+    
+    if let Err(e) = startup_loader.load_all_swagger_data().await {
+        tracing::error!("自动加载swagger数据失败: {}", e);
+        // 注意：这里不返回错误，允许应用继续启动，即使swagger数据加载失败
+        tracing::warn!("应用将继续启动，但swagger数据可能不完整");
+    } else {
+        tracing::info!("swagger数据自动加载完成");
+    }
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
 
@@ -167,6 +188,10 @@ async fn main() -> anyhow::Result<()> {
             "/api/connections/time-series",
             get(get_time_series_connection_counts),
         )
+        // Interface relation routes
+        .merge(create_interface_relation_routes().with_state(interface_relation_state))
+        // Swagger UI for Interface Relations API
+        // .route("/api-docs/openapi.json", get(|| async { axum::Json(InterfaceRelationApiDoc::openapi()) }))
         // rmcp handle
         // .nest("/{endpoint_id}", sse_router)
         .route("/{endpoint_id}/sse", get(sse_handler))
@@ -213,7 +238,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// sse连接计数器
+/// session连接计数器
 fn session_counter(
     mut connect_rx: UnboundedReceiver<ConnectionMsg>,
     session_service: Arc<SessionService>,

@@ -5,9 +5,10 @@ use rmcp::transport::streamable_http_server::{SessionId, SessionManager};
 use std::future::Future;
 use std::sync::Arc;
 
+pub mod embedding;
 pub mod shutdown;
-mod swagger_util;
-mod util;
+pub mod swagger_util;
+pub mod util;
 
 use crate::services::SessionService;
 pub use shutdown::*;

@@ -2,7 +2,7 @@ use crate::models::{
     CreateEndpointRequest, DbPool, Endpoint, EndpointDetailResponse, EndpointMetrics,
     EndpointResponse, EndpointStatus, McpConfig, UpdateEndpointRequest,
 };
-use crate::utils::get_china_time;
+use crate::utils::{generate_api_details, get_china_time};
 use anyhow::Result;
 use serde_json::Value;
 use sqlx::Row;
@@ -206,6 +206,17 @@ impl EndpointService {
         Ok(endpoints.into_iter().map(|e| e.into()).collect())
     }
 
+    /// Get all endpoints with full data (including swagger_content)
+    pub async fn get_all_endpoints(&self) -> Result<Vec<Endpoint>> {
+        let endpoints = sqlx::query_as::<_, Endpoint>(
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE status != 'deleted' ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(endpoints)
+    }
+
     /// Get endpoints with pagination, search and filter support
     pub async fn get_endpoints_paginated(
         &self,
@@ -306,8 +317,7 @@ impl EndpointService {
             };
 
         // Generate API details
-        let swagger_service = crate::services::SwaggerService::new(self.clone());
-        let api_details = swagger_service.generate_api_details(&swagger_spec)?;
+        let api_details = generate_api_details(&swagger_spec)?;
 
         // Get base URL
         let base_url = swagger_spec

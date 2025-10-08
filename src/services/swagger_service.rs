@@ -1,9 +1,9 @@
 use crate::models::{
-    ApiDetail, ApiParameter, CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest,
+    CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest,
     SwaggerToMcpResponse,
 };
 use crate::services::EndpointService;
-use crate::utils::{generate_mcp_tools, schema_to_json_schema};
+use crate::utils::generate_mcp_tools;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use sqlx::Row;
@@ -153,130 +153,12 @@ impl SwaggerService {
 
         Ok(())
     }
-
-    /// Generate API details from swagger spec
-    pub fn generate_api_details(&self, spec: &SwaggerSpec) -> Result<Vec<ApiDetail>> {
-        let mut api_details = Vec::new();
-        let base_url = spec
-            .servers
-            .as_ref()
-            .and_then(|servers| servers.first())
-            .map(|server| server.url.clone());
-
-        for (path, path_item) in &spec.paths {
-            // Generate details for each HTTP method
-            if let Some(operation) = &path_item.get {
-                api_details.push(self.create_api_detail("GET", path, operation, spec, &base_url)?);
-            }
-            if let Some(operation) = &path_item.post {
-                api_details.push(self.create_api_detail("POST", path, operation, spec, &base_url)?);
-            }
-            if let Some(operation) = &path_item.put {
-                api_details.push(self.create_api_detail("PUT", path, operation, spec, &base_url)?);
-            }
-            if let Some(operation) = &path_item.delete {
-                api_details
-                    .push(self.create_api_detail("DELETE", path, operation, spec, &base_url)?);
-            }
-            if let Some(operation) = &path_item.patch {
-                api_details
-                    .push(self.create_api_detail("PATCH", path, operation, spec, &base_url)?);
-            }
-        }
-
-        Ok(api_details)
-    }
-
-    fn create_api_detail(
-        &self,
-        method: &str,
-        path: &str,
-        operation: &crate::models::Operation,
-        spec: &SwaggerSpec,
-        _base_url: &Option<String>,
-    ) -> Result<ApiDetail> {
-        let mut path_params = Vec::new();
-        let mut query_params = Vec::new();
-        let mut header_params = Vec::new();
-        let mut request_body_schema = None;
-        let mut response_schema = None;
-
-        // Process parameters
-        if let Some(parameters) = &operation.parameters {
-            for param in parameters {
-                let api_param = ApiParameter {
-                    name: param.name.clone(),
-                    required: param.required.unwrap_or(false),
-                    description: param.description.clone(),
-                    param_type: param
-                        .schema
-                        .as_ref()
-                        .and_then(|s| s.schema_type.clone())
-                        .unwrap_or_else(|| "string".to_string()),
-                    schema: param
-                        .schema
-                        .as_ref()
-                        .map(|s| schema_to_json_schema(s, spec))
-                        .transpose()?,
-                };
-
-                match param.location.as_str() {
-                    "path" => path_params.push(api_param),
-                    "query" => query_params.push(api_param),
-                    "header" => header_params.push(api_param),
-                    _ => {} // Ignore other parameter types for now
-                }
-            }
-        }
-
-        // Process request body
-        if let Some(request_body) = &operation.request_body {
-            if let Some(content) = request_body.content.get("application/json") {
-                if let Some(schema) = &content.schema {
-                    request_body_schema = Some(schema_to_json_schema(schema, spec)?);
-                }
-            }
-        }
-
-        // Process responses
-        let responses = serde_json::to_value(&operation.responses)?;
-
-        // Process response schema (use first 2xx response)
-        if let Some(responses_map) = &operation.responses {
-            for (status_code, response) in responses_map {
-                if status_code.starts_with("2") {
-                    if let Some(content) = &response.content {
-                        if let Some(media_type) = content.get("application/json") {
-                            if let Some(schema) = &media_type.schema {
-                                response_schema = Some(schema_to_json_schema(schema, spec)?);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(ApiDetail {
-            path: path.to_string(),
-            method: method.to_string(),
-            summary: operation.summary.clone(),
-            description: operation.description.clone(),
-            operation_id: operation.operation_id.clone(),
-            path_params,
-            query_params,
-            header_params,
-            request_body_schema,
-            response_schema,
-            responses,
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::generate_api_details;
     use super::*;
-    use crate::models::SwaggerToMcpRequest;
 
     fn create_test_swagger_spec() -> SwaggerSpec {
         serde_json::from_str(
@@ -858,12 +740,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_api_details_with_array_types() {
-        let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
-        let endpoint_service = EndpointService::new(pool);
-        let service = SwaggerService::new(endpoint_service);
-
         let spec = create_array_type_swagger_spec();
-        let api_details = service.generate_api_details(&spec).unwrap();
+        let api_details = generate_api_details(&spec).unwrap();
 
         // 验证生成的API详情数量
         assert_eq!(api_details.len(), 2); // GET和POST两个方法
