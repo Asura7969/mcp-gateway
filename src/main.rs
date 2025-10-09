@@ -153,7 +153,6 @@ async fn main() -> anyhow::Result<()> {
         },
     );
 
-    // let (sse_server, router) = SseServer::new(config);
     let merge_state = state::MergeState {
         app_state: app_state.clone(),
         app,
@@ -181,8 +180,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/metrics/endpoints", get(get_all_endpoint_metrics))
         // Swagger conversion route
         .route("/api/swagger", post(convert_swagger_to_mcp))
-        // Health API route
-        .route("/api/health", get(get_api_health))
         // System status route
         .route("/api/system/status", get(get_system_status))
         // Connection tracking routes
@@ -197,10 +194,6 @@ async fn main() -> anyhow::Result<()> {
         )
         // Interface relation routes
         .merge(create_interface_relation_routes().with_state(interface_relation_state))
-        // Swagger UI for Interface Relations API
-        // .route("/api-docs/openapi.json", get(|| async { axum::Json(InterfaceRelationApiDoc::openapi()) }))
-        // rmcp handle
-        // .nest("/{endpoint_id}", sse_router)
         .route("/{endpoint_id}/sse", get(sse_handler))
         .route("/message", post(post_event_handler))
         .nest_service("/stream", stream_http_service)
