@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("EmbeddingService initialized");
 
     // Create interface relation state
-    let interface_relation_state = InterfaceRelationState::new(embedding_service.clone())
+    let interface_relation_state = InterfaceRetrievalState::new(embedding_service.clone())
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
 

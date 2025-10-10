@@ -1,6 +1,6 @@
 use crate::models::endpoint::Endpoint;
 use crate::services::{
-    interface_retrieval_service::{InterfaceRelationService, ParseSwaggerRequest},
+    interface_retrieval_service::{InterfaceRetrievalService, ParseSwaggerRequest},
     EndpointService,
 };
 use anyhow::Result;
@@ -10,18 +10,18 @@ use tracing::{error, info, warn};
 /// 启动时自动加载服务
 pub struct StartupLoaderService {
     endpoint_service: Arc<EndpointService>,
-    interface_relation_service: Arc<InterfaceRelationService>,
+    interface_retrieval_service: Arc<InterfaceRetrievalService>,
 }
 
 impl StartupLoaderService {
     /// 创建新的启动加载服务实例
     pub fn new(
         endpoint_service: Arc<EndpointService>,
-        interface_relation_service: Arc<InterfaceRelationService>,
+        interface_retrieval_service: Arc<InterfaceRetrievalService>,
     ) -> Self {
         Self {
             endpoint_service,
-            interface_relation_service,
+            interface_retrieval_service,
         }
     }
 
@@ -109,7 +109,7 @@ impl StartupLoaderService {
 
         // 调用interface_relation_service的parse_and_store_swagger方法
         match self
-            .interface_relation_service
+            .interface_retrieval_service
             .parse_and_store_swagger(request)
             .await
         {

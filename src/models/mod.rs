@@ -1,6 +1,6 @@
 pub mod database;
 pub mod endpoint;
-pub mod interface_relation;
+pub mod interface_retrieval;
 pub mod swagger;
 
 pub use database::*;

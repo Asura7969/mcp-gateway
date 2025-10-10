@@ -80,7 +80,7 @@ rmcp = { git = "https://github.com/Asura7969/rust-sdk.git", branch = "feature-v0
 ] }
 
 # db
-surrealdb = {version = "2.3.10", features = ["kv-mem", "protocol-ws", "protocol-http"]}
+surrealdb = {version = "2.3.10", features = ["kv-mem", "protocol-ws", "protocol-http", "kv-rocksdb"]}
 
 async-trait = "0.1"
 

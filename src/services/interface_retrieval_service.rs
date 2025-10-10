@@ -1,4 +1,4 @@
-use crate::models::interface_relation::*;
+use crate::models::interface_retrieval::*;
 use crate::models::swagger::SwaggerSpec;
 use crate::services::EmbeddingService;
 use crate::utils::generate_api_details;
@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use surrealdb::engine::local::{Db, Mem};
+use surrealdb::engine::local::Db;
 use surrealdb::sql::Datetime;
 use surrealdb::{RecordId, Surreal};
 
@@ -47,16 +47,16 @@ pub struct InterfaceWithMeta {
 }
 
 /// 接口关系服务 - 重新设计用于swagger解析和向量搜索
-pub struct InterfaceRelationService {
+pub struct InterfaceRetrievalService {
     db: Surreal<Db>,
     embedding_service: Arc<EmbeddingService>,
 }
 
-impl InterfaceRelationService {
+impl InterfaceRetrievalService {
     /// 创建新的服务实例
     pub async fn new(embedding_service: Arc<EmbeddingService>) -> Result<Self> {
-        let db = Surreal::new::<Mem>(()).await?;
-        db.use_ns("interface_relation").use_db("main").await?;
+        let db = embedding_service.new_db().await?;
+        db.use_ns("interface_retrieval").use_db("main").await?;
 
         let service = Self {
             db,
@@ -68,87 +68,42 @@ impl InterfaceRelationService {
 
     /// 初始化数据库schema
     async fn init_schema(&self) -> Result<()> {
-        // 创建接口表
-        self.db.query("DEFINE TABLE interface SCHEMAFULL").await?;
+        // 批量执行所有schema定义语句
+        let schema_sql = r#"
+            -- 创建接口表
+            DEFINE TABLE interface SCHEMAFULL;
+            
+            -- 定义接口表字段 - 基于新的ApiInterface结构
+            DEFINE FIELD path ON TABLE interface TYPE string;
+            DEFINE FIELD method ON TABLE interface TYPE string;
+            DEFINE FIELD summary ON TABLE interface TYPE option<string>;
+            DEFINE FIELD description ON TABLE interface TYPE option<string>;
+            DEFINE FIELD operation_id ON TABLE interface TYPE option<string>;
+            DEFINE FIELD path_params ON TABLE interface TYPE array;
+            DEFINE FIELD query_params ON TABLE interface TYPE array;
+            DEFINE FIELD header_params ON TABLE interface TYPE array;
+            DEFINE FIELD body_params ON TABLE interface TYPE array;
+            DEFINE FIELD request_schema ON TABLE interface TYPE option<string>;
+            DEFINE FIELD response_schema ON TABLE interface TYPE option<string>;
+            DEFINE FIELD tags ON TABLE interface TYPE array;
+            DEFINE FIELD domain ON TABLE interface TYPE option<string>;
+            DEFINE FIELD deprecated ON TABLE interface TYPE bool;
+            DEFINE FIELD service_description ON TABLE interface TYPE option<string>;
+            DEFINE FIELD embedding ON TABLE interface TYPE option<array>;
+            DEFINE FIELD embedding_model ON TABLE interface TYPE option<string>;
+            DEFINE FIELD embedding_updated_at ON TABLE interface TYPE option<string>;
+            DEFINE FIELD project_id ON TABLE interface TYPE string;
+            DEFINE FIELD version ON TABLE interface TYPE option<string>;
+            DEFINE FIELD created_at ON TABLE interface TYPE datetime;
+            DEFINE FIELD updated_at ON TABLE interface TYPE datetime;
+            
+            -- 创建索引以提高搜索性能
+            DEFINE INDEX idx_project_id ON TABLE interface COLUMNS project_id;
+            DEFINE INDEX idx_path_method ON TABLE interface COLUMNS path, method;
+            DEFINE INDEX idx_tags ON TABLE interface COLUMNS tags;
+        "#;
 
-        // 定义接口表字段 - 基于新的ApiInterface结构
-        self.db
-            .query("DEFINE FIELD path ON TABLE interface TYPE string")
-            .await?;
-        self.db
-            .query("DEFINE FIELD method ON TABLE interface TYPE string")
-            .await?;
-        self.db
-            .query("DEFINE FIELD summary ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD description ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD operation_id ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD path_params ON TABLE interface TYPE array")
-            .await?;
-        self.db
-            .query("DEFINE FIELD query_params ON TABLE interface TYPE array")
-            .await?;
-        self.db
-            .query("DEFINE FIELD header_params ON TABLE interface TYPE array")
-            .await?;
-        self.db
-            .query("DEFINE FIELD body_params ON TABLE interface TYPE array")
-            .await?;
-        self.db
-            .query("DEFINE FIELD request_schema ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD response_schema ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD tags ON TABLE interface TYPE array")
-            .await?;
-        self.db
-            .query("DEFINE FIELD domain ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD deprecated ON TABLE interface TYPE bool")
-            .await?;
-        self.db
-            .query("DEFINE FIELD service_description ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD embedding ON TABLE interface TYPE option<array>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD embedding_model ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD embedding_updated_at ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD project_id ON TABLE interface TYPE string")
-            .await?;
-        self.db
-            .query("DEFINE FIELD version ON TABLE interface TYPE option<string>")
-            .await?;
-        self.db
-            .query("DEFINE FIELD created_at ON TABLE interface TYPE datetime")
-            .await?;
-        self.db
-            .query("DEFINE FIELD updated_at ON TABLE interface TYPE datetime")
-            .await?;
-
-        // 创建索引以提高搜索性能
-        self.db
-            .query("DEFINE INDEX idx_project_id ON TABLE interface COLUMNS project_id")
-            .await?;
-        self.db
-            .query("DEFINE INDEX idx_path_method ON TABLE interface COLUMNS path, method")
-            .await?;
-        self.db
-            .query("DEFINE INDEX idx_tags ON TABLE interface COLUMNS tags")
-            .await?;
+        self.db.query(schema_sql).await?;
 
         Ok(())
     }
@@ -163,29 +118,34 @@ impl InterfaceRelationService {
 
         // 转换为 ApiInterface 并存储
         let mut interfaces: Vec<ApiInterface> = Vec::new();
-        
+
         for detail in api_details {
             let mut interface = ApiInterface::from(detail);
             // 设置服务描述和标签
             interface.service_description = swagger_spec.info.description.clone();
             interface.tags = vec![swagger_spec.info.title.clone()];
-            
+
             // 生成接口的文本表示用于向量化
             let interface_text = self.generate_interface_text(&interface);
-            
+
             // 生成向量嵌入
             match self.embedding_service.embed_text(&interface_text).await {
                 Ok(embedding) => {
                     interface.embedding = Some(embedding);
-                    interface.embedding_model = Some(self.embedding_service.get_model_name().to_string());
+                    interface.embedding_model =
+                        Some(self.embedding_service.get_model_name().to_string());
                     interface.embedding_updated_at = Some(Utc::now().to_rfc3339());
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to generate embedding for interface {}: {}", interface.path, e);
+                    tracing::warn!(
+                        "Failed to generate embedding for interface {}: {}",
+                        interface.path,
+                        e
+                    );
                     // 即使向量化失败，我们仍然存储接口
                 }
             }
-            
+
             interfaces.push(interface);
         }
 
@@ -198,42 +158,48 @@ impl InterfaceRelationService {
     /// 生成接口的文本表示用于向量化
     fn generate_interface_text(&self, interface: &ApiInterface) -> String {
         let mut text_parts = Vec::new();
-        
+
         // 添加方法和路径
         text_parts.push(format!("{} {}", interface.method, interface.path));
-        
+
         // 添加摘要和描述
         if let Some(summary) = &interface.summary {
             text_parts.push(summary.clone());
         }
-        
+
         if let Some(description) = &interface.description {
             text_parts.push(description.clone());
         }
-        
+
         // 添加服务描述
         if let Some(service_desc) = &interface.service_description {
             text_parts.push(service_desc.clone());
         }
-        
+
         // 添加标签
         if !interface.tags.is_empty() {
             text_parts.push(format!("tags: {}", interface.tags.join(", ")));
         }
-        
+
         // 添加参数信息
         for param in &interface.path_params {
             text_parts.push(format!("path param: {} ({})", param.name, param.param_type));
         }
-        
+
         for param in &interface.query_params {
-            text_parts.push(format!("query param: {} ({})", param.name, param.param_type));
+            text_parts.push(format!(
+                "query param: {} ({})",
+                param.name, param.param_type
+            ));
         }
-        
+
         for param in &interface.header_params {
-            text_parts.push(format!("header param: {} ({})", param.name, param.param_type));
+            text_parts.push(format!(
+                "header param: {} ({})",
+                param.name, param.param_type
+            ));
         }
-        
+
         text_parts.join(" | ")
     }
 
@@ -326,9 +292,10 @@ impl InterfaceRelationService {
             }
             (false, true) => {
                 // 纯关键词搜索
-                let mut results = self.search_interfaces_by_keywords(&request.query, max_results)
+                let mut results = self
+                    .search_interfaces_by_keywords(&request.query, max_results)
                     .await?;
-                
+
                 // 对关键词搜索结果应用过滤器
                 if let Some(filters) = &request.filters {
                     results = self.apply_search_filters(results, filters, &request.project_id);
@@ -425,7 +392,7 @@ impl InterfaceRelationService {
         &self,
         query: &str,
         max_results: u32,
-        similarity_threshold: f32,
+        _similarity_threshold: f32,
         project_id: Option<&str>,
         filters: Option<&InterfaceSearchFilters>,
     ) -> Result<Vec<InterfaceWithScore>> {
@@ -489,7 +456,9 @@ impl InterfaceRelationService {
              FROM interface \
              WHERE {} \
              ORDER BY similarity DESC \
-             LIMIT {}", where_clause, max_results);
+             LIMIT {}",
+            where_clause, max_results
+        );
 
         tracing::debug!("Vector search query with filters: {}", search_query);
 
@@ -500,19 +469,22 @@ impl InterfaceRelationService {
             .bind(("query_embedding", query_embedding))
             .await?
             .take(0)?;
-        
+
         // 4. 计算相似度并筛选
-        let results = interfaces_with_embeddings.iter().map(|record| {
-            let score = record.score.map_or(0_f32, |score| score);
-            let match_reason = format!("向量相似度: {:.3}", score);
-            InterfaceWithScore {
-                interface: record.interface.clone(),
-                score: score as f64,
-                match_reason,
-                similarity_score: Some(score),
-                search_type: "vector".to_string(),
-            }
-        }).collect::<Vec<InterfaceWithScore>>();
+        let results = interfaces_with_embeddings
+            .iter()
+            .map(|record| {
+                let score = record.score.map_or(0_f32, |score| score);
+                let match_reason = format!("向量相似度: {:.3}", score);
+                InterfaceWithScore {
+                    interface: record.interface.clone(),
+                    score: score as f64,
+                    match_reason,
+                    similarity_score: Some(score),
+                    search_type: "vector".to_string(),
+                }
+            })
+            .collect::<Vec<InterfaceWithScore>>();
 
         tracing::info!("Vector search completed: {} results", results.len());
 
@@ -583,20 +555,21 @@ impl InterfaceRelationService {
         let mut keyword_results = self
             .search_interfaces_by_keywords(query, max_results * 2)
             .await?;
-        
+
         // 应用过滤器到关键词搜索结果
         if let Some(f) = filters {
-            keyword_results = self.apply_search_filters(keyword_results, f, &project_id.map(|s| s.to_string()));
+            keyword_results =
+                self.apply_search_filters(keyword_results, f, &project_id.map(|s| s.to_string()));
         }
 
         // 向量搜索（使用优化版本，在数据库层面过滤）
         let vector_results = self
             .search_interfaces_by_vector_with_filters(
-                query, 
-                max_results * 2, 
+                query,
+                max_results * 2,
                 similarity_threshold,
                 project_id,
-                filters
+                filters,
             )
             .await?;
 

@@ -27,6 +27,8 @@ pub struct EmbeddingSettings {
     pub model_type: String,
     pub dimension: usize,
     pub aliyun: Option<AliyunSettings>,
+    pub surrealdb_storage: String,
+    pub surrealdb_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -50,6 +52,24 @@ pub struct EmbeddingConfig {
     pub api_key: Option<String>,
     /// 阿里云百炼配置
     pub aliyun_config: Option<AliyunBailianConfig>,
+    pub surrealdb_storage: Storage,
+    pub surrealdb_path: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Storage {
+    MEMORY,
+    ROCKSDB,
+}
+
+impl From<String> for Storage {
+    fn from(value: String) -> Self {
+        if value.eq_ignore_ascii_case("MEMORY") {
+            Storage::MEMORY
+        } else {
+            Storage::ROCKSDB
+        }
+    }
 }
 
 /// 阿里云百炼配置
@@ -73,6 +93,8 @@ impl Default for EmbeddingConfig {
             api_endpoint: None,
             api_key: None,
             aliyun_config: None,
+            surrealdb_storage: Storage::MEMORY,
+            surrealdb_path: None,
         }
     }
 }
@@ -119,6 +141,8 @@ impl Settings {
                 api_endpoint: None,
                 api_key: None,
                 aliyun_config,
+                surrealdb_storage: embedding_settings.surrealdb_storage.clone().into(),
+                surrealdb_path: embedding_settings.surrealdb_path.clone(),
             }
         } else {
             EmbeddingConfig::default()
@@ -142,6 +166,8 @@ impl Default for Settings {
                 model_type: "simple".to_string(),
                 dimension: 384,
                 aliyun: None,
+                surrealdb_storage: "memory".to_string(),
+                surrealdb_path: None,
             }),
         }
     }

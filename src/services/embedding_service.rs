@@ -1,6 +1,9 @@
-use crate::config::EmbeddingConfig;
+use crate::config::{EmbeddingConfig, Storage};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use surrealdb::engine::local::{Db, Mem, RocksDb};
+use surrealdb::Surreal;
+use tracing::{info, warn};
 
 /// 阿里云百炼嵌入请求结构
 #[derive(Debug, Serialize)]
@@ -56,6 +59,28 @@ impl EmbeddingService {
         Self {
             config,
             client: reqwest::Client::new(),
+        }
+    }
+
+    pub async fn new_db(&self) -> Result<Surreal<Db>> {
+        match self.config.surrealdb_storage {
+            Storage::MEMORY => {
+                warn!("SurrealDB storage type: memory");
+                Surreal::new::<Mem>(())
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create memory database: {}", e))
+            }
+            Storage::ROCKSDB => {
+                info!("SurrealDB storage type: rocksdb");
+                let path = self
+                    .config
+                    .surrealdb_path
+                    .as_deref()
+                    .unwrap_or("./db/data.db");
+                Surreal::new::<RocksDb>(path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create RocksDB database: {}", e))
+            }
         }
     }
 
@@ -143,16 +168,16 @@ mod tests {
     #[tokio::test]
     async fn test_embedding_service_creation() {
         use crate::config::Settings;
-        
+
         // 使用配置文件中的设置
         let settings = Settings::new().expect("Failed to load settings");
         let embedding_config = settings.to_embedding_config();
-        
+
         let service = EmbeddingService::new(embedding_config);
 
         // 验证服务创建成功
         assert_eq!(service.get_model_name(), "aliyun");
-        
+
         // 注意：这里不进行实际的 API 调用测试，因为需要真实的网络连接
         // 实际的 API 调用测试应该在集成测试中进行
         println!("✅ 嵌入服务创建成功！");

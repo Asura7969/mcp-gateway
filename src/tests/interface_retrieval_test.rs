@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::models::interface_relation::*;
+    use crate::models::interface_retrieval::*;
 
     #[tokio::test]
     async fn test_interface_model_creation() {

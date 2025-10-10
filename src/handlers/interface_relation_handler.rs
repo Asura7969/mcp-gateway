@@ -1,5 +1,7 @@
-use crate::models::interface_relation::*;
-use crate::services::interface_retrieval_service::{InterfaceRelationService, ParseSwaggerRequest};
+use crate::models::interface_retrieval::*;
+use crate::services::interface_retrieval_service::{
+    InterfaceRetrievalService, ParseSwaggerRequest,
+};
 use crate::services::EmbeddingService;
 use axum::{
     extract::{Path, State},
@@ -14,21 +16,21 @@ use std::time::Instant;
 
 /// 接口关系处理器的应用状态
 #[derive(Clone)]
-pub struct InterfaceRelationState {
-    pub service: Arc<InterfaceRelationService>,
+pub struct InterfaceRetrievalState {
+    pub service: Arc<InterfaceRetrievalService>,
 }
 
-impl InterfaceRelationState {
+impl InterfaceRetrievalState {
     pub async fn new(
         embedding_service: Arc<EmbeddingService>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let service = Arc::new(InterfaceRelationService::new(embedding_service).await?);
+        let service = Arc::new(InterfaceRetrievalService::new(embedding_service).await?);
         Ok(Self { service })
     }
 }
 
 /// 创建接口关系路由
-pub fn create_interface_relation_routes() -> Router<InterfaceRelationState> {
+pub fn create_interface_relation_routes() -> Router<InterfaceRetrievalState> {
     Router::new()
         .route(
             "/api/interface-relations/swagger/parse",
@@ -45,7 +47,7 @@ pub fn create_interface_relation_routes() -> Router<InterfaceRelationState> {
 ///
 /// 删除指定项目的所有接口和依赖关系数据
 pub async fn delete_project_data(
-    State(state): State<InterfaceRelationState>,
+    State(state): State<InterfaceRetrievalState>,
     Path(project_id): Path<String>,
 ) -> Result<Json<String>, (StatusCode, Json<InterfaceRelationError>)> {
     tracing::info!("Deleting data for project: {}", project_id);
@@ -89,7 +91,7 @@ pub async fn delete_project_data(
 ///
 /// 接收Swagger JSON格式数据，解析其中的HTTP接口信息并存储到数据库
 pub async fn parse_swagger_json(
-    State(state): State<InterfaceRelationState>,
+    State(state): State<InterfaceRetrievalState>,
     Json(request): Json<SwaggerParseRequest>,
 ) -> Result<Json<SwaggerParseResponse>, (StatusCode, Json<InterfaceRelationError>)> {
     tracing::info!("Parsing Swagger JSON for project: {}", request.project_id);
@@ -161,7 +163,7 @@ pub async fn parse_swagger_json(
 ///
 /// 通过关键词向量或完全匹配方式检索相关接口信息
 pub async fn search_interfaces(
-    State(state): State<InterfaceRelationState>,
+    State(state): State<InterfaceRetrievalState>,
     Json(request): Json<InterfaceSearchRequest>,
 ) -> Result<Json<InterfaceSearchResponse>, (StatusCode, Json<InterfaceRelationError>)> {
     tracing::info!("Searching interfaces with query: {}", request.query);
