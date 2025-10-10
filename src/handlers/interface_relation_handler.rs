@@ -1,5 +1,5 @@
 use crate::models::interface_relation::*;
-use crate::services::interface_relation_service::{InterfaceRelationService, ParseSwaggerRequest};
+use crate::services::interface_retrieval_service::{InterfaceRelationService, ParseSwaggerRequest};
 use crate::services::EmbeddingService;
 use axum::{
     extract::{Path, State},

@@ -149,6 +149,7 @@ pub struct InterfaceRecord {
     pub interface: ApiInterface,
     pub project_id: String,
     pub version: Option<String>,
+    pub score: Option<f32>,
     pub created_at: Datetime,
     pub updated_at: Datetime,
 }

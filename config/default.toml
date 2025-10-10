@@ -1,0 +1,18 @@
+[server]
+host = "0.0.0.0"
+port = 3000
+
+[database]
+url = "mysql://mcpuser:mcppassword@localhost:3306/mcp_gateway"
+max_connections = 5
+mcp_call_max_connections = 2
+
+[embedding]
+model_type = "simple"
+dimension = 384
+
+[embedding.aliyun]
+api_key = ""
+model = ""
+endpoint = ""
+workspace_id = ""

@@ -142,7 +142,7 @@ ALIYUN_BAILIAN_MODEL=text-embedding-v1
 ALIYUN_BAILIAN_ENDPOINT=https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
 ALIYUN_BAILIAN_WORKSPACE_ID=your_workspace_id_here
 EMBEDDING_DIMENSION=1536
-EMBEDDING_MODEL_TYPE=aliyun-bailian
+EMBEDDING_MODEL_TYPE=aliyun
 ```
 
 ### 4. 配置加载
@@ -153,7 +153,7 @@ EMBEDDING_MODEL_TYPE=aliyun-bailian
 /// 从环境变量创建设置
 pub fn from_env() -> Result<Self, ConfigError> {
     // ... 环境变量读取逻辑
-    let aliyun_config = if model_type == "aliyun-bailian" {
+    let aliyun_config = if model_type == "aliyun" {
         if let (Ok(api_key), Ok(model), Ok(endpoint)) = (
             env::var("ALIYUN_BAILIAN_API_KEY"),
             env::var("ALIYUN_BAILIAN_MODEL"),
@@ -192,7 +192,7 @@ ALIYUN_BAILIAN_API_KEY=sk-147da3d9a37545c19010d27dcc5fcdb4
 ALIYUN_BAILIAN_MODEL=text-embedding-v4
 ALIYUN_BAILIAN_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
 EMBEDDING_DIMENSION=1536
-EMBEDDING_MODEL_TYPE=aliyun-bailian
+EMBEDDING_MODEL_TYPE=aliyun
 ```
 
 ### 2. 初始化 EmbeddingService

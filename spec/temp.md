@@ -1,0 +1,22 @@
+
+- [x] 支持swagger json转mcp
+- [x] 支持sse、streamable mcp
+- [x] 支持会话连接数统计
+- [x] 接口向量检索
+- [x] 阿里云百炼向量检测
+- [ ] surrealdb新增rocksdb存储支持
+  - [ ] 新增环境变量配置
+- [ ] surrealdb元数据过滤
+  - [ ] server名称
+  - [ ] method
+  - [ ] path路径
+  - [ ] tag
+- [ ] 前端新增向量检索接口调试页面
+- [ ] 测试会话连接数量准确性
+- [ ] 支持prometheus指标输出
+- [ ] grafana监控面板json配置文件
+  - [ ] 服务状态
+  - [ ] mcp会话连接数据
+  - [ ] cpu、memory监控
+- [ ] docker部署该项目
+- [ ] readme重写

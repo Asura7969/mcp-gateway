@@ -47,3 +47,4 @@ monitoring/data/
 # Config files with secrets
 config/local.*
 config/production.*
+config/development.toml

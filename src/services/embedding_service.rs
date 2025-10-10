@@ -72,6 +72,11 @@ impl EmbeddingService {
         }
     }
 
+    /// 获取模型名称
+    pub fn get_model_name(&self) -> &str {
+        &self.config.model_name
+    }
+
     /// 使用阿里云百炼 API 进行文本向量化
     async fn aliyun_embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let config = self
@@ -137,38 +142,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_service_creation() {
-        let config = EmbeddingConfig::default();
-        let service = EmbeddingService::new(config);
+        use crate::config::Settings;
+        
+        // 使用配置文件中的设置
+        let settings = Settings::new().expect("Failed to load settings");
+        let embedding_config = settings.to_embedding_config();
+        
+        let service = EmbeddingService::new(embedding_config);
 
-        // 测试简单文本向量化
-        let result = service.embed_text("测试文本").await;
-        assert!(result.is_ok());
-
-        let embedding = result.unwrap();
-        assert_eq!(embedding.len(), 384); // 默认维度
+        // 验证服务创建成功
+        assert_eq!(service.get_model_name(), "aliyun");
+        
+        // 注意：这里不进行实际的 API 调用测试，因为需要真实的网络连接
+        // 实际的 API 调用测试应该在集成测试中进行
+        println!("✅ 嵌入服务创建成功！");
     }
 
     #[tokio::test]
     async fn test_aliyun_embedding_service() {
-        let aliyun_config = AliyunBailianConfig {
-            api_key: "test_key".to_string(),
-            model: "text-embedding-v1".to_string(),
-            endpoint: "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding".to_string(),
-            workspace_id: Some("test_workspace".to_string()),
-        };
+        use crate::config::Settings;
+        // 从环境变量加载配置
+        let settings = Settings::new().expect("Failed to load settings");
 
-        let config = EmbeddingConfig {
-            dimension: 1536,
-            model_name: "text-embedding-v1".to_string(),
-            api_endpoint: None,
-            api_key: None,
-            aliyun_config: Some(aliyun_config),
-        };
-
+        let config = settings.to_embedding_config();
         let service = EmbeddingService::new(config);
 
-        // 注意：这个测试需要真实的 API 密钥才能通过
-        // 在实际环境中，应该使用模拟的 HTTP 客户端进行测试
+        // 验证配置是否正确加载
         assert!(service.config.aliyun_config.is_some());
+
+        let vec = service.embed_text("测试数据").await.unwrap();
+        assert!(vec.len() > 0);
     }
 }

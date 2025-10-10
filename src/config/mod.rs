@@ -99,60 +99,6 @@ impl Settings {
         s.try_deserialize()
     }
 
-    /// 从环境变量创建设置
-    pub fn from_env() -> Result<Self, ConfigError> {
-        let mut settings = Self::default();
-
-        // 从环境变量读取数据库配置
-        if let Ok(database_url) = env::var("DATABASE_URL") {
-            settings.database.url = database_url;
-        }
-
-        // 从环境变量读取服务器配置
-        if let Ok(host) = env::var("SERVER_HOST") {
-            settings.server.host = host;
-        }
-        if let Ok(port) = env::var("SERVER_PORT") {
-            if let Ok(port_num) = port.parse::<u16>() {
-                settings.server.port = port_num;
-            }
-        }
-
-        // 从环境变量读取向量模型配置
-        let model_type = env::var("EMBEDDING_MODEL_TYPE").unwrap_or_else(|_| "simple".to_string());
-        let dimension = env::var("EMBEDDING_DIMENSION")
-            .unwrap_or_else(|_| "384".to_string())
-            .parse::<usize>()
-            .unwrap_or(384);
-
-        let aliyun_config = if model_type == "aliyun-bailian" {
-            if let (Ok(api_key), Ok(model), Ok(endpoint)) = (
-                env::var("ALIYUN_BAILIAN_API_KEY"),
-                env::var("ALIYUN_BAILIAN_MODEL"),
-                env::var("ALIYUN_BAILIAN_ENDPOINT"),
-            ) {
-                Some(AliyunSettings {
-                    api_key,
-                    model,
-                    endpoint,
-                    workspace_id: env::var("ALIYUN_BAILIAN_WORKSPACE_ID").ok(),
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        settings.embedding = Some(EmbeddingSettings {
-            model_type,
-            dimension,
-            aliyun: aliyun_config,
-        });
-
-        Ok(settings)
-    }
-
     /// 转换为 EmbeddingConfig
     pub fn to_embedding_config(&self) -> EmbeddingConfig {
         if let Some(embedding_settings) = &self.embedding {

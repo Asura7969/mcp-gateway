@@ -1,6 +1,6 @@
 pub mod embedding_service;
 pub mod endpoint_service;
-pub mod interface_relation_service;
+pub mod interface_retrieval_service;
 pub mod mcp_service;
 mod session_service;
 mod startup_loader_service;

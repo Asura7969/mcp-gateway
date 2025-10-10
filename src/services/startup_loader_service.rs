@@ -1,6 +1,6 @@
 use crate::models::endpoint::Endpoint;
 use crate::services::{
-    interface_relation_service::{InterfaceRelationService, ParseSwaggerRequest},
+    interface_retrieval_service::{InterfaceRelationService, ParseSwaggerRequest},
     EndpointService,
 };
 use anyhow::Result;

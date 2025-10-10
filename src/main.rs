@@ -3,6 +3,7 @@ mod error;
 mod handlers;
 mod middleware;
 mod models;
+mod routes;
 mod services;
 mod state;
 mod tests;
@@ -24,6 +25,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::middleware::stream_requests_interceptor;
 use crate::models::DB_POOL;
+use crate::routes::*;
 use crate::services::{EmbeddingService, McpService, SessionService};
 use crate::utils::MonitoredSessionManager;
 use config::Settings;
@@ -160,49 +162,29 @@ async fn main() -> anyhow::Result<()> {
 
     // Build application router with API endpoints
     let app = Router::new()
-        // Health check routes
-        .route("/health", get(get_api_health))
-        .route("/ready", get(|| async { "Ready" }))
-        .route("/live", get(|| async { "Live" }))
-        // Endpoint management routes
-        .route("/api/endpoint", post(create_endpoint).get(list_endpoints))
-        .route("/api/endpoints", get(list_endpoints_paginated))
-        .route(
-            "/api/endpoint/{id}",
-            get(get_endpoint)
-                .put(update_endpoint)
-                .delete(delete_endpoint),
-        )
-        .route("/api/endpoint/{id}/metrics", get(get_endpoint_metrics))
-        .route("/api/endpoint/{id}/start", post(start_endpoint))
-        .route("/api/endpoint/{id}/stop", post(stop_endpoint))
-        // Metrics routes
-        .route("/api/metrics/endpoints", get(get_all_endpoint_metrics))
-        // Swagger conversion route
-        .route("/api/swagger", post(convert_swagger_to_mcp))
-        // System status route
-        .route("/api/system/status", get(get_system_status))
-        // Connection tracking routes
-        .route("/api/connections/endpoint", get(get_endpoint_connections))
-        .route(
-            "/api/connections/endpoint/count",
-            get(get_endpoint_connection_count),
-        )
-        .route(
-            "/api/connections/time-series",
-            get(get_time_series_connection_counts),
-        )
+        .merge(create_health_routes())
+        .merge(create_endpoint_routes())
+        .merge(create_metrics_routes())
+        .merge(create_swagger_routes())
+        .merge(create_system_routes())
+        .merge(create_connection_routes())
         // Interface relation routes
         .merge(create_interface_relation_routes().with_state(interface_relation_state))
-        .route("/{endpoint_id}/sse", get(sse_handler))
-        .route("/message", post(post_event_handler))
+        .route(
+            "/{endpoint_id}/sse",
+            get(sse_handler).with_state(merge_state.clone()),
+        )
+        .route(
+            "/message",
+            post(post_event_handler).with_state(merge_state.clone()),
+        )
         .nest_service("/stream", stream_http_service)
         .layer(
             ServiceBuilder::new()
                 .layer(cors_layer())
                 .layer(axum::middleware::from_fn(logging::log_requests))
                 .layer(axum::middleware::from_fn_with_state(
-                    app_state.clone(),
+                    app_state,
                     stream_requests_interceptor,
                 )),
         )

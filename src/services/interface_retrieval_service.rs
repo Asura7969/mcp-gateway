@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use surrealdb::engine::local::{Db, Mem};
 use surrealdb::sql::Datetime;
-use surrealdb::Surreal;
+use surrealdb::{RecordId, Surreal};
 
 /// 解析Swagger请求
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct ParseSwaggerRequest {
 /// 带有元数据的接口结构（用于数据库存储）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InterfaceWithMeta {
-    pub id: Option<String>,
+    pub id: Option<RecordId>,
     pub project_id: String,
     pub path: String,
     pub method: String,
@@ -162,21 +162,79 @@ impl InterfaceRelationService {
         let api_details = generate_api_details(&swagger_spec)?;
 
         // 转换为 ApiInterface 并存储
-        let interfaces: Vec<ApiInterface> = api_details
-            .into_iter()
-            .map(|detail| {
-                let mut interface = ApiInterface::from(detail);
-                // 设置服务描述和标签
-                interface.service_description = swagger_spec.info.description.clone();
-                interface.tags = vec![swagger_spec.info.title.clone()];
-                interface
-            })
-            .collect();
+        let mut interfaces: Vec<ApiInterface> = Vec::new();
+        
+        for detail in api_details {
+            let mut interface = ApiInterface::from(detail);
+            // 设置服务描述和标签
+            interface.service_description = swagger_spec.info.description.clone();
+            interface.tags = vec![swagger_spec.info.title.clone()];
+            
+            // 生成接口的文本表示用于向量化
+            let interface_text = self.generate_interface_text(&interface);
+            
+            // 生成向量嵌入
+            match self.embedding_service.embed_text(&interface_text).await {
+                Ok(embedding) => {
+                    interface.embedding = Some(embedding);
+                    interface.embedding_model = Some(self.embedding_service.get_model_name().to_string());
+                    interface.embedding_updated_at = Some(Utc::now().to_rfc3339());
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to generate embedding for interface {}: {}", interface.path, e);
+                    // 即使向量化失败，我们仍然存储接口
+                }
+            }
+            
+            interfaces.push(interface);
+        }
 
         self.store_interfaces(&interfaces, &request.project_id, None)
             .await?;
 
         Ok(())
+    }
+
+    /// 生成接口的文本表示用于向量化
+    fn generate_interface_text(&self, interface: &ApiInterface) -> String {
+        let mut text_parts = Vec::new();
+        
+        // 添加方法和路径
+        text_parts.push(format!("{} {}", interface.method, interface.path));
+        
+        // 添加摘要和描述
+        if let Some(summary) = &interface.summary {
+            text_parts.push(summary.clone());
+        }
+        
+        if let Some(description) = &interface.description {
+            text_parts.push(description.clone());
+        }
+        
+        // 添加服务描述
+        if let Some(service_desc) = &interface.service_description {
+            text_parts.push(service_desc.clone());
+        }
+        
+        // 添加标签
+        if !interface.tags.is_empty() {
+            text_parts.push(format!("tags: {}", interface.tags.join(", ")));
+        }
+        
+        // 添加参数信息
+        for param in &interface.path_params {
+            text_parts.push(format!("path param: {} ({})", param.name, param.param_type));
+        }
+        
+        for param in &interface.query_params {
+            text_parts.push(format!("query param: {} ({})", param.name, param.param_type));
+        }
+        
+        for param in &interface.header_params {
+            text_parts.push(format!("header param: {} ({})", param.name, param.param_type));
+        }
+        
+        text_parts.join(" | ")
     }
 
     /// 存储接口到数据库
@@ -245,34 +303,43 @@ impl InterfaceRelationService {
         let mut interfaces = match (enable_vector_search, enable_keyword_search) {
             (true, true) => {
                 // 混合搜索：关键词 + 向量
-                self.hybrid_search(
+                self.hybrid_search_with_filters(
                     &request.query,
                     max_results,
                     vector_weight,
                     similarity_threshold,
+                    request.project_id.as_deref(),
+                    request.filters.as_ref(),
                 )
                 .await?
             }
             (true, false) => {
-                // 纯向量搜索
-                self.search_interfaces_by_vector(&request.query, max_results, similarity_threshold)
-                    .await?
+                // 纯向量搜索（使用优化版本，支持数据库层面过滤）
+                self.search_interfaces_by_vector_with_filters(
+                    &request.query,
+                    max_results,
+                    similarity_threshold,
+                    request.project_id.as_deref(),
+                    request.filters.as_ref(),
+                )
+                .await?
             }
             (false, true) => {
                 // 纯关键词搜索
-                self.search_interfaces_by_keywords(&request.query, max_results)
-                    .await?
+                let mut results = self.search_interfaces_by_keywords(&request.query, max_results)
+                    .await?;
+                
+                // 对关键词搜索结果应用过滤器
+                if let Some(filters) = &request.filters {
+                    results = self.apply_search_filters(results, filters, &request.project_id);
+                }
+                results
             }
             (false, false) => {
                 // 两种搜索都禁用，返回空结果
                 Vec::new()
             }
         };
-
-        // 应用过滤器
-        if let Some(filters) = &request.filters {
-            interfaces = self.apply_search_filters(interfaces, filters, &request.project_id);
-        }
 
         // 限制结果数量
         interfaces.truncate(max_results as usize);
@@ -336,47 +403,118 @@ impl InterfaceRelationService {
         Ok(results)
     }
 
-    /// 基于向量相似度搜索接口
+    /// 基于向量相似度搜索接口（优化版本，支持元数据过滤）
     async fn search_interfaces_by_vector(
         &self,
         query: &str,
         max_results: u32,
         similarity_threshold: f32,
     ) -> Result<Vec<InterfaceWithScore>> {
+        self.search_interfaces_by_vector_with_filters(
+            query,
+            max_results,
+            similarity_threshold,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// 基于向量相似度搜索接口（带元数据过滤）
+    async fn search_interfaces_by_vector_with_filters(
+        &self,
+        query: &str,
+        max_results: u32,
+        similarity_threshold: f32,
+        project_id: Option<&str>,
+        filters: Option<&InterfaceSearchFilters>,
+    ) -> Result<Vec<InterfaceWithScore>> {
         // 1. 生成查询文本的向量
         let query_embedding = self.embedding_service.embed_text(query).await?;
 
-        // 2. 获取所有有向量嵌入的接口
-        let interfaces_with_embeddings: Vec<InterfaceRecord> = self
-            .db
-            .query("SELECT * FROM interface WHERE embedding IS NOT NULL")
-            .await?
-            .take(0)?;
+        // 2. 构建带元数据过滤的查询语句
+        let mut where_conditions = vec!["embedding IS NOT NULL".to_string()];
 
-        let mut results = Vec::new();
+        // 项目ID过滤
+        if let Some(pid) = project_id {
+            where_conditions.push(format!("project_id = '{}'", pid));
+        }
 
-        // 3. 计算相似度并筛选
-        for record in interfaces_with_embeddings {
-            if let Some(embedding) = &record.interface.embedding {
-                let similarity = self.calculate_cosine_similarity(&query_embedding, embedding);
-
-                if similarity >= similarity_threshold {
-                    let match_reason = format!("向量相似度: {:.3}", similarity);
-
-                    results.push(InterfaceWithScore {
-                        interface: record.interface,
-                        score: similarity as f64,
-                        match_reason,
-                        similarity_score: Some(similarity),
-                        search_type: "vector".to_string(),
-                    });
+        // 应用其他过滤条件
+        if let Some(f) = filters {
+            // HTTP方法过滤
+            if let Some(methods) = &f.methods {
+                if !methods.is_empty() {
+                    let methods_str = methods
+                        .iter()
+                        .map(|m| format!("'{}'", m))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    where_conditions.push(format!("method IN [{}]", methods_str));
                 }
+            }
+
+            // 标签过滤 - 检查是否包含任一指定标签
+            if let Some(tags) = &f.tags {
+                if !tags.is_empty() {
+                    let tag_conditions = tags
+                        .iter()
+                        .map(|tag| format!("'{}' IN tags", tag))
+                        .collect::<Vec<_>>()
+                        .join(" OR ");
+                    where_conditions.push(format!("({})", tag_conditions));
+                }
+            }
+
+            // 域过滤
+            if let Some(domain) = &f.domain {
+                where_conditions.push(format!("domain = '{}'", domain));
+            }
+
+            // 是否包含已弃用的接口
+            if !f.include_deprecated.unwrap_or(true) {
+                where_conditions.push("deprecated = false".to_string());
+            }
+
+            // 路径前缀过滤
+            if let Some(prefix) = &f.path_prefix {
+                where_conditions.push(format!("string::startsWith(path, '{}')", prefix));
             }
         }
 
-        // 4. 按相似度排序并限制结果数量
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        results.truncate(max_results as usize);
+        let where_clause = where_conditions.join(" AND ");
+        let search_query = format!(
+            "SELECT \
+                *,math::vector::cosine_similarity(embedding, $query_embedding) AS score \
+             FROM interface \
+             WHERE {} \
+             ORDER BY similarity DESC \
+             LIMIT {}", where_clause, max_results);
+
+        tracing::debug!("Vector search query with filters: {}", search_query);
+
+        // 3. 执行数据库查询
+        let interfaces_with_embeddings: Vec<InterfaceRecord> = self
+            .db
+            .query(&search_query)
+            .bind(("query_embedding", query_embedding))
+            .await?
+            .take(0)?;
+        
+        // 4. 计算相似度并筛选
+        let results = interfaces_with_embeddings.iter().map(|record| {
+            let score = record.score.map_or(0_f32, |score| score);
+            let match_reason = format!("向量相似度: {:.3}", score);
+            InterfaceWithScore {
+                interface: record.interface.clone(),
+                score: score as f64,
+                match_reason,
+                similarity_score: Some(score),
+                search_type: "vector".to_string(),
+            }
+        }).collect::<Vec<InterfaceWithScore>>();
+
+        tracing::info!("Vector search completed: {} results", results.len());
 
         Ok(results)
     }
@@ -394,6 +532,72 @@ impl InterfaceRelationService {
             .await?;
         let vector_results = self
             .search_interfaces_by_vector(query, max_results * 2, similarity_threshold)
+            .await?;
+
+        let mut combined_results = HashMap::new();
+
+        // 合并关键词搜索结果
+        for result in keyword_results {
+            let key = format!("{}:{}", result.interface.path, result.interface.method);
+            combined_results.insert(key, result);
+        }
+
+        // 合并向量搜索结果，调整评分
+        for mut result in vector_results {
+            let key = format!("{}:{}", result.interface.path, result.interface.method);
+
+            if let Some(existing) = combined_results.get_mut(&key) {
+                // 混合评分：关键词权重 + 向量权重
+                existing.score = existing.score * (1.0 - vector_weight as f64)
+                    + result.score * vector_weight as f64;
+                existing.search_type = "hybrid".to_string();
+                existing.similarity_score = result.similarity_score;
+            } else {
+                result.search_type = "vector".to_string();
+                combined_results.insert(key, result);
+            }
+        }
+
+        let mut final_results: Vec<InterfaceWithScore> = combined_results.into_values().collect();
+        final_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        final_results.truncate(max_results as usize);
+
+        Ok(final_results)
+    }
+
+    /// 混合搜索：关键词 + 向量（支持元数据过滤）
+    async fn hybrid_search_with_filters(
+        &self,
+        query: &str,
+        max_results: u32,
+        vector_weight: f32,
+        similarity_threshold: f32,
+        project_id: Option<&str>,
+        filters: Option<&InterfaceSearchFilters>,
+    ) -> Result<Vec<InterfaceWithScore>> {
+        // 关键词搜索（需要后续应用过滤器）
+        let mut keyword_results = self
+            .search_interfaces_by_keywords(query, max_results * 2)
+            .await?;
+        
+        // 应用过滤器到关键词搜索结果
+        if let Some(f) = filters {
+            keyword_results = self.apply_search_filters(keyword_results, f, &project_id.map(|s| s.to_string()));
+        }
+
+        // 向量搜索（使用优化版本，在数据库层面过滤）
+        let vector_results = self
+            .search_interfaces_by_vector_with_filters(
+                query, 
+                max_results * 2, 
+                similarity_threshold,
+                project_id,
+                filters
+            )
             .await?;
 
         let mut combined_results = HashMap::new();
