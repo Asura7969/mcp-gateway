@@ -86,8 +86,8 @@ async fn main() -> anyhow::Result<()> {
     let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config)?);
     tracing::info!("EmbeddingService initialized");
 
-    // Create interface relation state
-    let interface_relation_state = InterfaceRetrievalState::new(embedding_service.clone())
+    // Create interface retrieval state
+    let interface_retrieval_state = InterfaceRetrievalState::new(embedding_service.clone())
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
 
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("开始自动加载endpoints表中的swagger信息...");
     let startup_loader = StartupLoaderService::new(
         endpoint_service.clone(),
-        interface_relation_state.service.clone(),
+        interface_retrieval_state.service.clone(),
     );
 
     if let Err(e) = startup_loader.load_all_swagger_data().await {
@@ -169,7 +169,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(create_system_routes())
         .merge(create_connection_routes())
         // Interface relation routes
-        .merge(create_interface_relation_routes().with_state(interface_relation_state))
+        .merge(create_interface_relation_routes().with_state(interface_retrieval_state))
         .route(
             "/{endpoint_id}/sse",
             get(sse_handler).with_state(merge_state.clone()),

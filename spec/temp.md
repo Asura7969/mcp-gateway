@@ -6,14 +6,14 @@
 - [x] 支持阿里云百炼向量检测
 - [x] 支持`SurrealDB`新增`rocksdb`存储
   - [x] 新增环境变量配置
-- [ ] `SurrealDB`元数据过滤
-  - [ ] server名称
-  - [ ] method
-  - [ ] path前缀路径
-  - [ ] tag
+- [x] `SurrealDB`元数据过滤
+  - [x] server名称
+  - [x] method
+  - [x] path前缀路径
+  - [x] tag
 - [ ] 前端新增向量检索接口调试页面
 - [ ] 测试会话连接数量准确性
-- [ ] mcp tools列表展示中文名称
+- [x] mcp tools列表展示中文名称
 - [ ] 支持prometheus指标输出
 - [ ] grafana监控面板json配置文件
   - [ ] 服务状态

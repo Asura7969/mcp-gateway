@@ -1,9 +1,8 @@
 use crate::models::interface_retrieval::*;
 use crate::models::swagger::SwaggerSpec;
 use crate::services::EmbeddingService;
-use crate::utils::generate_api_details;
+use crate::utils::{generate_api_details, get_china_time};
 use anyhow::Result;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -134,7 +133,7 @@ impl InterfaceRetrievalService {
                     interface.embedding = Some(embedding);
                     interface.embedding_model =
                         Some(self.embedding_service.get_model_name().to_string());
-                    interface.embedding_updated_at = Some(Utc::now().to_rfc3339());
+                    interface.embedding_updated_at = Some(get_china_time().to_string());
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -213,7 +212,7 @@ impl InterfaceRetrievalService {
         let mut stored_count = 0;
 
         for interface in interfaces {
-            let now = Datetime::from(Utc::now());
+            let now = Datetime::from(get_china_time());
             let interface_with_meta = InterfaceWithMeta {
                 id: None,
                 project_id: project_id.to_string(),
@@ -355,6 +354,7 @@ impl InterfaceRetrievalService {
             let match_reason = self.get_match_reason(&record.interface, query);
 
             results.push(InterfaceWithScore {
+                project_id: record.project_id,
                 interface: record.interface,
                 score,
                 match_reason,
@@ -368,23 +368,6 @@ impl InterfaceRetrievalService {
         results.truncate(max_results as usize);
 
         Ok(results)
-    }
-
-    /// 基于向量相似度搜索接口（优化版本，支持元数据过滤）
-    async fn search_interfaces_by_vector(
-        &self,
-        query: &str,
-        max_results: u32,
-        similarity_threshold: f32,
-    ) -> Result<Vec<InterfaceWithScore>> {
-        self.search_interfaces_by_vector_with_filters(
-            query,
-            max_results,
-            similarity_threshold,
-            None,
-            None,
-        )
-        .await
     }
 
     /// 基于向量相似度搜索接口（带元数据过滤）
@@ -455,7 +438,7 @@ impl InterfaceRetrievalService {
                 *,math::vector::cosine_similarity(embedding, $query_embedding) AS score \
              FROM interface \
              WHERE {} \
-             ORDER BY similarity DESC \
+             ORDER BY score DESC \
              LIMIT {}",
             where_clause, max_results
         );
@@ -477,6 +460,7 @@ impl InterfaceRetrievalService {
                 let score = record.score.map_or(0_f32, |score| score);
                 let match_reason = format!("向量相似度: {:.3}", score);
                 InterfaceWithScore {
+                    project_id: record.project_id.clone(),
                     interface: record.interface.clone(),
                     score: score as f64,
                     match_reason,
@@ -489,56 +473,6 @@ impl InterfaceRetrievalService {
         tracing::info!("Vector search completed: {} results", results.len());
 
         Ok(results)
-    }
-
-    /// 混合搜索：关键词 + 向量
-    async fn hybrid_search(
-        &self,
-        query: &str,
-        max_results: u32,
-        vector_weight: f32,
-        similarity_threshold: f32,
-    ) -> Result<Vec<InterfaceWithScore>> {
-        let keyword_results = self
-            .search_interfaces_by_keywords(query, max_results * 2)
-            .await?;
-        let vector_results = self
-            .search_interfaces_by_vector(query, max_results * 2, similarity_threshold)
-            .await?;
-
-        let mut combined_results = HashMap::new();
-
-        // 合并关键词搜索结果
-        for result in keyword_results {
-            let key = format!("{}:{}", result.interface.path, result.interface.method);
-            combined_results.insert(key, result);
-        }
-
-        // 合并向量搜索结果，调整评分
-        for mut result in vector_results {
-            let key = format!("{}:{}", result.interface.path, result.interface.method);
-
-            if let Some(existing) = combined_results.get_mut(&key) {
-                // 混合评分：关键词权重 + 向量权重
-                existing.score = existing.score * (1.0 - vector_weight as f64)
-                    + result.score * vector_weight as f64;
-                existing.search_type = "hybrid".to_string();
-                existing.similarity_score = result.similarity_score;
-            } else {
-                result.search_type = "vector".to_string();
-                combined_results.insert(key, result);
-            }
-        }
-
-        let mut final_results: Vec<InterfaceWithScore> = combined_results.into_values().collect();
-        final_results.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        final_results.truncate(max_results as usize);
-
-        Ok(final_results)
     }
 
     /// 混合搜索：关键词 + 向量（支持元数据过滤）
@@ -606,23 +540,6 @@ impl InterfaceRetrievalService {
         final_results.truncate(max_results as usize);
 
         Ok(final_results)
-    }
-
-    /// 计算余弦相似度
-    fn calculate_cosine_similarity(&self, vec1: &[f32], vec2: &[f32]) -> f32 {
-        if vec1.len() != vec2.len() {
-            return 0.0;
-        }
-
-        let dot_product: f32 = vec1.iter().zip(vec2.iter()).map(|(a, b)| a * b).sum();
-        let norm1: f32 = vec1.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let norm2: f32 = vec2.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-        if norm1 == 0.0 || norm2 == 0.0 {
-            0.0
-        } else {
-            dot_product / (norm1 * norm2)
-        }
     }
 
     /// 计算匹配分数
@@ -716,8 +633,10 @@ impl InterfaceRetrievalService {
     ) -> Vec<InterfaceWithScore> {
         interfaces.retain(|item| {
             // 项目ID过滤
-            if let Some(_pid) = project_id {
-                // 这里需要从数据库查询项目ID，暂时跳过
+            if let Some(pid) = project_id {
+                if !pid.eq(&item.project_id) {
+                    return false;
+                }
             }
 
             // HTTP方法过滤

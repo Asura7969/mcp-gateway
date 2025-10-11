@@ -129,7 +129,9 @@ impl From<crate::models::endpoint::ApiParameter> for ApiParameter {
 /// 带评分的接口结果
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct InterfaceWithScore {
-    /// 接口信息
+    /// 所属项目id
+    pub project_id: String,
+    // 接口信息
     pub interface: ApiInterface,
     /// 匹配评分 (0.0-1.0)
     pub score: f64,

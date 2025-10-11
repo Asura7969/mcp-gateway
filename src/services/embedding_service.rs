@@ -27,7 +27,9 @@ struct AliyunEmbeddingParameters {
 #[derive(Debug, Deserialize)]
 struct AliyunEmbeddingResponse {
     output: AliyunEmbeddingOutput,
+    #[allow(dead_code)]
     usage: Option<AliyunUsage>,
+    #[allow(dead_code)]
     request_id: String,
 }
 
@@ -38,12 +40,14 @@ struct AliyunEmbeddingOutput {
 
 #[derive(Debug, Deserialize)]
 struct AliyunEmbedding {
+    #[allow(dead_code)]
     text_index: i32,
     embedding: Vec<f32>,
 }
 
 #[derive(Debug, Deserialize)]
 struct AliyunUsage {
+    #[allow(dead_code)]
     total_tokens: i32,
 }
 
@@ -163,7 +167,6 @@ impl EmbeddingService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::AliyunBailianConfig;
 
     #[tokio::test]
     async fn test_embedding_service_creation() {

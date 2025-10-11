@@ -31,8 +31,10 @@ pub struct TimeSeriesConnectionCount {
 
 #[derive(Deserialize)]
 pub struct ConnectionQueryParams {
+    #[allow(dead_code)]
     #[serde(default)]
     pub start_time: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub end_time: Option<String>,
     #[serde(default)]

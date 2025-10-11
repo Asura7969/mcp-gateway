@@ -153,17 +153,6 @@ pub fn create_mcp_tool(
     operation: &crate::models::Operation,
     spec: &SwaggerSpec, // Add spec parameter
 ) -> anyhow::Result<McpTool> {
-    // Use consistent naming without random UUID
-    let tool_name = operation.operation_id.clone().unwrap_or_else(|| {
-        format!(
-            "{}_{}_api",
-            method.to_lowercase(),
-            path.replace('/', "_")
-                .replace('{', "")
-                .replace('}', "")
-                .trim_start_matches('_')
-        )
-    });
 
     let title = operation
         .summary
@@ -299,7 +288,7 @@ pub fn create_mcp_tool(
     };
 
     Ok(McpTool {
-        name: tool_name,
+        name: title.clone(),
         title,
         description,
         input_schema,
