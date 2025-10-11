@@ -598,8 +598,8 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
             <DialogTitle>端点详情</DialogTitle>
           </DialogHeader>
           {endpointDetail && (
-            <div className='space-y-6'>
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+            <div className='space-y-4' style={{ maxWidth: '85vw', width: '85vw' }}>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
                 <div>
                   <span className='font-medium'>服务名称:</span>
                   <span className='ml-2'>{endpointDetail.name}</span>
@@ -995,6 +995,10 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
     </div>
   );
 }
+
+
+
+
 
 
 
