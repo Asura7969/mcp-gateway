@@ -11,6 +11,8 @@ struct AliyunEmbeddingRequest {
     model: String,
     input: AliyunEmbeddingInput,
     parameters: Option<AliyunEmbeddingParameters>,
+    dimensions: Option<usize>,
+    encoding_format: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,6 +124,8 @@ impl EmbeddingService {
             parameters: Some(AliyunEmbeddingParameters {
                 text_type: "document".to_string(),
             }),
+            dimensions: Some(self.config.dimension),
+            encoding_format: Some("float".to_string()),
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
@@ -160,7 +164,10 @@ impl EmbeddingService {
             return Err(anyhow::anyhow!("阿里云百炼 API 返回空的向量结果"));
         }
 
-        Ok(api_response.output.embeddings[0].embedding.clone())
+        // 添加调试日志，打印返回的向量信息
+        let embedding = &api_response.output.embeddings[0].embedding;
+        tracing::debug!("阿里云百炼 API 返回向量数据: {:?}", &api_response.output.embeddings);
+        Ok(embedding.clone())
     }
 }
 

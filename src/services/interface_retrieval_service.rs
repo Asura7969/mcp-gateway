@@ -126,10 +126,12 @@ impl InterfaceRetrievalService {
 
             // 生成接口的文本表示用于向量化
             let interface_text = self.generate_interface_text(&interface);
+            tracing::debug!("Generating embedding for interface text: {}", interface_text);
 
             // 生成向量嵌入
             match self.embedding_service.embed_text(&interface_text).await {
                 Ok(embedding) => {
+                    tracing::debug!("Successfully generated embedding with {} dimensions", embedding.len());
                     interface.embedding = Some(embedding);
                     interface.embedding_model =
                         Some(self.embedding_service.get_model_name().to_string());
@@ -146,6 +148,15 @@ impl InterfaceRetrievalService {
             }
 
             interfaces.push(interface);
+        }
+
+        tracing::debug!("Storing {} interfaces", interfaces.len());
+        for (i, interface) in interfaces.iter().enumerate() {
+            if let Some(embedding) = &interface.embedding {
+                tracing::debug!("Interface {} embedding dimensions: {}", i, embedding.len());
+            } else {
+                tracing::debug!("Interface {} has no embedding", i);
+            }
         }
 
         self.store_interfaces(&interfaces, &request.project_id, None)
@@ -385,6 +396,9 @@ impl InterfaceRetrievalService {
         // 2. 构建带元数据过滤的查询语句
         let mut where_conditions = vec!["embedding IS NOT NULL".to_string()];
 
+        // 添加维度检查，确保向量维度一致
+        where_conditions.push(format!("array::len(embedding) = {}", query_embedding.len()));
+
         // 项目ID过滤
         if let Some(pid) = project_id {
             where_conditions.push(format!("project_id = '{}'", pid));
@@ -435,7 +449,7 @@ impl InterfaceRetrievalService {
         let where_clause = where_conditions.join(" AND ");
         let search_query = format!(
             "SELECT \
-                *,math::vector::cosine_similarity(embedding, $query_embedding) AS score \
+                *,vector::similarity::cosine(embedding, $query_embedding) AS score \
              FROM interface \
              WHERE {} \
              ORDER BY score DESC \

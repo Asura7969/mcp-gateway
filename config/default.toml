@@ -9,7 +9,7 @@ mcp_call_max_connections = 2
 
 [embedding]
 model_type = "simple"
-dimension = 384
+dimension = 1024
 # memory or rocksdb
 surrealdb_storage = "memory"
 surrealdb_path = ""
