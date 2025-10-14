@@ -88,7 +88,7 @@ impl InterfaceRetrievalService {
             DEFINE FIELD domain ON TABLE interface TYPE option<string>;
             DEFINE FIELD deprecated ON TABLE interface TYPE bool;
             DEFINE FIELD service_description ON TABLE interface TYPE option<string>;
-            DEFINE FIELD embedding ON TABLE interface TYPE option<array>;
+            DEFINE FIELD embedding ON TABLE interface TYPE array<float> ASSERT array::len($value) == 1024;
             DEFINE FIELD embedding_model ON TABLE interface TYPE option<string>;
             DEFINE FIELD embedding_updated_at ON TABLE interface TYPE option<string>;
             DEFINE FIELD project_id ON TABLE interface TYPE string;
@@ -397,7 +397,7 @@ impl InterfaceRetrievalService {
         let mut where_conditions = vec!["embedding IS NOT NULL".to_string()];
 
         // 添加维度检查，确保向量维度一致
-        where_conditions.push(format!("array::len(embedding) = {}", query_embedding.len()));
+        // where_conditions.push(format!("array::len(embedding) = {}", query_embedding.len()));
 
         // 项目ID过滤
         if let Some(pid) = project_id {
@@ -442,7 +442,7 @@ impl InterfaceRetrievalService {
 
             // 路径前缀过滤
             if let Some(prefix) = &f.path_prefix {
-                where_conditions.push(format!("string::startsWith(path, '{}')", prefix));
+                where_conditions.push(format!("string::starts_with(path, '{}')", prefix));
             }
         }
 

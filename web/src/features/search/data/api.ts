@@ -8,7 +8,7 @@ const api = axios.create({
 
 export class SearchApiService {
   static async search(params: SearchParams): Promise<SearchResult[]> {
-    const response = await api.post('/api/interface-relations/search', params)
+    const response = await api.post('/api/interface-retrieval/search', params)
     const data: SearchResponse = response.data
     
     // 转换后端响应数据为前端期望的格式

@@ -1,0 +1,272 @@
+#[cfg(test)]
+mod integration_tests {
+    use crate::models::interface_retrieval::{
+        InterfaceSearchRequest,
+    };
+    use crate::services::{
+        embedding_service::EmbeddingService, interface_retrieval_service::InterfaceRetrievalService,
+    };
+    use anyhow::Result;
+    use std::sync::Arc;
+    use tracing::info;
+    use crate::config::Settings;
+
+    /// 设置测试环境
+    async fn setup_test_environment() -> Result<(
+        Arc<InterfaceRetrievalService>,
+        Arc<EmbeddingService>,
+    )> {
+        // 初始化日志
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let settings = Settings::new().unwrap_or_else(|_| {
+            tracing::warn!("Failed to load configuration, using defaults");
+            Settings::default()
+        });
+
+        // 为测试创建模拟的向量嵌入配置
+
+        let embedding_config = settings.to_embedding_config();
+        let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config.clone())?);
+        info!("Test embedding config: {:?}", embedding_config);
+
+        // 创建服务实例
+        let interface_retrieval_service = Arc::new(
+            InterfaceRetrievalService::new(embedding_service.clone()).await?
+        );
+
+        Ok((interface_retrieval_service, embedding_service))
+    }
+
+
+
+    #[tokio::test]
+    async fn test_search_functionality_without_data() -> Result<()> {
+        // 设置测试环境
+        let (interface_service, _embedding_service) = setup_test_environment().await?;
+
+        let project_id = "test-project".to_string();
+
+        info!("开始测试搜索功能（无数据状态）");
+
+        // 创建搜索请求 - 只使用关键词搜索以避免网络调用
+        let search_request = InterfaceSearchRequest {
+            query: "user management".to_string(),
+            project_id: Some(project_id.clone()),
+            max_results: Some(10),
+            enable_vector_search: Some(false), // 禁用向量搜索以避免网络调用
+            enable_keyword_search: Some(true),  // 只使用关键词搜索
+            vector_search_weight: None,
+            similarity_threshold: None,
+            search_mode: Some("keyword".to_string()),
+            filters: None,
+        };
+
+        // 由于我们没有实际存储数据，搜索应该返回空结果
+        // 这个测试主要验证搜索功能不会崩溃
+        let results = interface_service.search_interfaces(search_request).await?;
+
+        // 验证搜索功能正常工作（即使没有数据）
+        assert_eq!(results.total_count, 0, "Should return 0 results when no data is stored");
+        assert!(results.interfaces.is_empty(), "Should return empty interface list");
+        assert_eq!(results.search_mode, "keyword", "Should use keyword search mode");
+
+        info!("搜索功能测试完成：");
+        info!("  - Total count: {}", results.total_count);
+        info!("  - Search mode: {}", results.search_mode);
+        info!("  - Query time: {}ms", results.query_time_ms);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_swagger_storage_and_vector_retrieval() -> Result<()> {
+        // 设置测试环境
+        let (interface_service, _embedding_service) = setup_test_environment().await?;
+
+        // 创建测试用的Swagger JSON数据
+        let swagger_json = serde_json::json!({
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "description": "测试API接口"
+            },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "获取用户列表",
+                        "description": "获取系统中所有用户的列表信息",
+                        "operationId": "getUsers",
+                        "parameters": [
+                            {
+                                "name": "page",
+                                "in": "query",
+                                "description": "页码",
+                                "required": false,
+                                "schema": {
+                                    "type": "integer",
+                                    "default": 1
+                                }
+                            },
+                            {
+                                "name": "limit",
+                                "in": "query", 
+                                "description": "每页数量",
+                                "required": false,
+                                "schema": {
+                                    "type": "integer",
+                                    "default": 10
+                                }
+                            }
+                        ],
+                        "responses": {
+                            "200": {
+                                "description": "成功返回用户列表",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "integer"},
+                                                    "name": {"type": "string"},
+                                                    "email": {"type": "string"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "/users/{id}": {
+                    "get": {
+                        "summary": "根据ID获取用户",
+                        "description": "根据用户ID获取特定用户的详细信息",
+                        "operationId": "getUserById",
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "path",
+                                "description": "用户ID",
+                                "required": true,
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            }
+                        ],
+                        "responses": {
+                            "200": {
+                                "description": "成功返回用户信息",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {"type": "integer"},
+                                                "name": {"type": "string"},
+                                                "email": {"type": "string"},
+                                                "created_at": {"type": "string", "format": "date-time"}
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "404": {
+                                "description": "用户不存在"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 使用parse_and_store_swagger存储数据
+        use crate::services::interface_retrieval_service::ParseSwaggerRequest;
+        let parse_request = ParseSwaggerRequest {
+            project_id: "test_project".to_string(),
+            swagger_json,
+        };
+
+        let store_result = interface_service.parse_and_store_swagger(parse_request).await;
+        assert!(store_result.is_ok(), "存储Swagger数据失败: {:?}", store_result.err());
+
+        // 验证数据已存储 - 通过项目ID查询接口
+        let project_interfaces = interface_service.get_project_interfaces("test_project").await;
+        assert!(project_interfaces.is_ok(), "查询项目接口失败: {:?}", project_interfaces.err());
+        
+        let interfaces = project_interfaces.unwrap();
+        assert_eq!(interfaces.len(), 2, "应该存储了2个接口");
+
+        // 验证接口内容
+        let get_users = interfaces.iter().find(|i| i.path == "/users" && i.method == "GET");
+        assert!(get_users.is_some(), "应该找到GET /users接口");
+        let get_users = get_users.unwrap();
+        assert_eq!(get_users.summary, Some("获取用户列表".to_string()));
+        assert!(get_users.embedding.is_some(), "接口应该有向量嵌入");
+
+        let get_user_by_id = interfaces.iter().find(|i| i.path == "/users/{id}" && i.method == "GET");
+        assert!(get_user_by_id.is_some(), "应该找到GET /users/{{id}}接口");
+        let get_user_by_id = get_user_by_id.unwrap();
+        assert_eq!(get_user_by_id.summary, Some("根据ID获取用户".to_string()));
+        assert!(get_user_by_id.embedding.is_some(), "接口应该有向量嵌入");
+
+        // 测试向量检索功能 - 搜索与"用户"相关的接口
+        let search_request = InterfaceSearchRequest {
+            query: "用户列表".to_string(),
+            project_id: Some("test_project".to_string()),
+            max_results: Some(10),
+            enable_vector_search: Some(true),
+            enable_keyword_search: Some(true),
+            vector_search_weight: None,
+            similarity_threshold: None,
+            search_mode: None,
+            filters: None,
+        };
+
+        let search_result = interface_service.search_interfaces(search_request).await;
+        assert!(search_result.is_ok(), "向量搜索失败: {:?}", search_result.err());
+
+        let result = search_result.unwrap();
+        assert!(result.interfaces.len() > 0, "应该能搜索到相关接口");
+        assert!(result.total_count > 0, "总数应该大于0");
+
+        // 验证搜索结果包含预期的接口
+        let found_get_users = result.interfaces.iter().any(|interface_with_score| 
+            interface_with_score.interface.path == "/users" && interface_with_score.interface.method == "GET"
+        );
+        assert!(found_get_users, "搜索结果应该包含GET /users接口");
+
+        // 测试另一个搜索查询
+        let search_request2 = InterfaceSearchRequest {
+            query: "根据ID获取".to_string(),
+            project_id: Some("test_project".to_string()),
+            max_results: Some(10),
+            enable_vector_search: Some(true),
+            enable_keyword_search: Some(true),
+            vector_search_weight: None,
+            similarity_threshold: None,
+            search_mode: None,
+            filters: None,
+        };
+
+        let search_result2 = interface_service.search_interfaces(search_request2).await;
+        assert!(search_result2.is_ok(), "第二次向量搜索失败: {:?}", search_result2.err());
+
+        let result2 = search_result2.unwrap();
+        assert!(result2.interfaces.len() > 0, "第二次搜索应该能找到相关接口");
+
+        // 验证能找到根据ID获取用户的接口
+        let found_get_user_by_id = result2.interfaces.iter().any(|interface_with_score| 
+            interface_with_score.interface.path == "/users/{id}" && interface_with_score.interface.method == "GET"
+        );
+        assert!(found_get_user_by_id, "搜索结果应该包含GET /users/{{id}}接口");
+
+        Ok(())
+    }
+
+
+}

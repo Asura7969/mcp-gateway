@@ -33,12 +33,12 @@ impl InterfaceRetrievalState {
 pub fn create_interface_relation_routes() -> Router<InterfaceRetrievalState> {
     Router::new()
         .route(
-            "/api/interface-relations/swagger/parse",
+            "/api/interface-retrieval/swagger/parse",
             post(parse_swagger_json),
         )
-        .route("/api/interface-relations/search", post(search_interfaces))
+        .route("/api/interface-retrieval/search", post(search_interfaces))
         .route(
-            "/api/interface-relations/projects/{project_id}",
+            "/api/interface-retrieval/projects/{project_id}",
             delete(delete_project_data),
         )
 }

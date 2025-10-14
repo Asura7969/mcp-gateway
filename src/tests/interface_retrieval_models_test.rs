@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
-    use std::collections::HashMap;
     use utoipa::ToSchema;
 
     /// 接口节点 - 表示一个API接口
