@@ -10,9 +10,20 @@ mcp_call_max_connections = 2
 [embedding]
 model_type = "simple"
 dimension = 1024
-# memory or rocksdb
-surrealdb_storage = "memory"
-surrealdb_path = ""
+vector_type="pgvectorrs"
+
+[embedding.pgvectorrs]
+host = "localhost"
+port = "5432"
+user = "postgres"
+password = "mcp123456"
+database = "mcp"
+
+[embedding.elasticsearch]
+host = "localhost"
+port = "9200"
+user = "elastic"
+password = "elastic"
 
 [embedding.aliyun]
 api_key = ""

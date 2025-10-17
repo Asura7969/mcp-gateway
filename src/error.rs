@@ -17,9 +17,3 @@ impl IntoResponse for Error {
     }
 }
 
-impl From<surrealdb::Error> for Error {
-    fn from(error: surrealdb::Error) -> Self {
-        eprintln!("{error}");
-        Self::Db
-    }
-}

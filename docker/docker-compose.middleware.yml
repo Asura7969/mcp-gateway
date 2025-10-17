@@ -21,6 +21,71 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
       retries: 10
+  pgvecto-rs:
+    build:
+      context: .
+      dockerfile: Dockerfile.pgvecto-rs-zhparser
+    image: mcp-gateway-pgvecto-rs-zhparser:latest
+    container_name: mcp-gateway-pgvecto-rs
+    profiles:
+      - pgvecto-rs
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      PGUSER: postgres
+      # The password for the default postgres user.
+      POSTGRES_PASSWORD: mcp123456
+      # The name of the default postgres database.
+      POSTGRES_DB: mcp
+      # postgres data directory
+      PGDATA: ${PGVECTOR_PGDATA:-/var/lib/postgresql/data/pgdata}
+      # SCWS 环境变量
+      SCWS_HOME: /usr/local/scws
+    volumes:
+      - ./volumes/pgvecto_rs/data:/var/lib/postgresql/data
+    networks:
+      - mcp-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    container_name: elasticsearch
+    profiles:
+      - elasticsearch
+    restart: always
+    volumes:
+      - ./elasticsearch/docker-entrypoint.sh:/docker-entrypoint-mount.sh
+      - ./volumes/elasticsearch/data:/usr/share/elasticsearch/data
+    networks:
+      - mcp-network
+    environment:
+      ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD:-elastic}
+      VECTOR_STORE: ${VECTOR_STORE:-}
+      cluster.name: mcp-es-cluster
+      node.name: mcp-es0
+      discovery.type: single-node
+      xpack.license.self_generated.type: basic
+      xpack.security.enabled: 'true'
+      xpack.security.enrollment.enabled: 'false'
+      xpack.security.http.ssl.enabled: 'false'
+    ports:
+      - ${ELASTICSEARCH_PORT:-9200}:9200
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    entrypoint: [ 'sh', '-c', "sh /docker-entrypoint-mount.sh" ]
+    healthcheck:
+      test: [ 'CMD', 'curl', '-s', 'http://localhost:9200/_cluster/health?pretty' ]
+      interval: 30s
+      timeout: 10s
+      retries: 50
 
   # Prometheus for monitoring
   prometheus:

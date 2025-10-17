@@ -1,9 +1,8 @@
 use crate::models::endpoint::ApiDetail;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use surrealdb::sql::Datetime;
-use surrealdb::RecordId;
 use utoipa::ToSchema;
+use crate::services::Filter;
 
 /// 接口节点 - 表示一个API接口，基于ApiDetail结构设计
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -94,12 +93,8 @@ impl From<ApiDetail> for ApiInterface {
                 .map(|p| p.into())
                 .collect(),
             body_params: Vec::new(), // endpoint::ApiDetail没有body_params字段
-            request_schema: api_detail
-                .request_body_schema
-                .map(|s| serde_json::to_string(&s).unwrap_or_default()),
-            response_schema: Some(
-                serde_json::to_string(&api_detail.response_schema).unwrap_or_default(),
-            ),
+            request_schema: api_detail.request_body_schema.map(|v| v.to_string()),
+            response_schema: api_detail.response_schema.map(|v| v.to_string()),
             tags: Vec::new(), // 需要从swagger spec中提取
             domain: None,
             deprecated: false,         // 需要从swagger spec中提取
@@ -126,34 +121,28 @@ impl From<crate::models::endpoint::ApiParameter> for ApiParameter {
     }
 }
 
+/// 搜索类型枚举
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, ToSchema)]
+pub enum SearchType {
+    /// 向量搜索
+    Vector,
+    /// 关键词搜索
+    Keyword,
+    /// 混合搜索
+    Hybrid,
+}
+
 /// 带评分的接口结果
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct InterfaceWithScore {
     /// 所属项目id
-    pub project_id: String,
+    pub project_id: Option<String>,
     // 接口信息
     pub interface: ApiInterface,
     /// 匹配评分 (0.0-1.0)
     pub score: f64,
     /// 匹配原因说明
     pub match_reason: String,
-    /// 向量相似度分数（如果使用了向量搜索）
-    pub similarity_score: Option<f32>,
-    /// 搜索类型：keyword, vector, hybrid
-    pub search_type: String,
-}
-
-/// SurrealDB中的接口记录
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InterfaceRecord {
-    pub id: Option<RecordId>,
-    #[serde(flatten)]
-    pub interface: ApiInterface,
-    pub project_id: String,
-    pub version: Option<String>,
-    pub score: Option<f32>,
-    pub created_at: Datetime,
-    pub updated_at: Datetime,
 }
 
 /// 错误类型
@@ -164,73 +153,37 @@ pub struct InterfaceRelationError {
     pub details: Option<HashMap<String, String>>,
 }
 
-/// Swagger JSON解析请求
+/// Swagger解析请求
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SwaggerParseRequest {
-    /// Swagger JSON数据
+    /// Swagger JSON内容
     pub swagger_json: serde_json::Value,
     /// 项目ID
     pub project_id: String,
-    /// 版本信息（可选）
+    /// 版本号
     pub version: Option<String>,
-    /// 是否生成向量嵌入
+    /// 是否生成嵌入向量
     pub generate_embeddings: Option<bool>,
 }
 
-/// Swagger解析响应
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct SwaggerParseResponse {
-    /// 解析成功的接口数量
-    pub parsed_interfaces_count: u32,
-    /// 存储的接口数量
-    pub stored_interfaces_count: u32,
-    /// 生成的依赖关系数量
-    pub dependencies_count: u32,
-    /// 处理耗时（毫秒）
-    pub processing_time_ms: u64,
-    /// 错误信息（如果有）
-    pub errors: Vec<String>,
-    /// 警告信息（如果有）
-    pub warnings: Vec<String>,
-}
 
 /// 接口检索请求
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InterfaceSearchRequest {
     /// 搜索关键词或查询文本
     pub query: String,
-    /// 项目ID（可选，用于限制查询范围）
-    pub project_id: Option<String>,
+    /// 搜索类型
+    pub search_type: SearchType,
     /// 最大返回接口数量
-    pub max_results: Option<u32>,
-    /// 是否启用向量搜索（语义搜索）
-    pub enable_vector_search: Option<bool>,
-    /// 是否启用关键词搜索
-    pub enable_keyword_search: Option<bool>,
-    /// 向量搜索权重（0.0-1.0），与关键词搜索结果混合
-    pub vector_search_weight: Option<f32>,
+    pub max_results: u32,
     /// 向量搜索相似度阈值（0.0-1.0）
     pub similarity_threshold: Option<f32>,
-    /// 搜索模式：keyword, vector, hybrid
-    pub search_mode: Option<String>,
+    /// 向量搜索权重（0.0-1.0），用于混合搜索
+    pub vector_weight: Option<f32>,
     /// 过滤条件
-    pub filters: Option<InterfaceSearchFilters>,
+    pub filters: Option<Filter>,
 }
 
-/// 接口搜索过滤条件
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct InterfaceSearchFilters {
-    /// HTTP方法过滤
-    pub methods: Option<Vec<String>>,
-    /// 标签过滤
-    pub tags: Option<Vec<String>>,
-    /// 域名过滤
-    pub domain: Option<String>,
-    /// 是否包含已废弃的接口
-    pub include_deprecated: Option<bool>,
-    /// 路径前缀过滤
-    pub path_prefix: Option<String>,
-}
 
 /// 接口检索响应
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

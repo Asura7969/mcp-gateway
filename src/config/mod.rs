@@ -6,7 +6,7 @@ use std::env;
 pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
-    pub embedding: Option<EmbeddingSettings>,
+    pub embedding: EmbeddingConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -22,58 +22,52 @@ pub struct DatabaseConfig {
     pub mcp_call_max_connections: u32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct EmbeddingSettings {
-    pub model_type: String,
-    pub dimension: usize,
-    pub aliyun: Option<AliyunSettings>,
-    pub surrealdb_storage: String,
-    pub surrealdb_path: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AliyunSettings {
-    pub api_key: String,
-    pub model: String,
-    pub endpoint: String,
-    pub workspace_id: Option<String>,
-}
-
 /// 向量化配置
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct EmbeddingConfig {
+    /// 模型类型
+    pub model_type: String,
     /// 向量维度
     pub dimension: usize,
-    /// 模型名称
-    pub model_name: String,
-    /// API 端点
-    pub api_endpoint: Option<String>,
-    /// API 密钥
-    pub api_key: Option<String>,
+    /// 向量存储类型
+    pub vector_type: VectorType,
     /// 阿里云百炼配置
-    pub aliyun_config: Option<AliyunBailianConfig>,
-    pub surrealdb_storage: Storage,
-    pub surrealdb_path: Option<String>,
+    pub aliyun: Option<AliyunBailianConfig>,
+    /// PgVector-RS配置
+    pub pgvectorrs: Option<PgvectorRsConfig>,
+    /// SurrealDB配置
+    pub elasticsearch: Option<ElasticsearchConfig>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Storage {
-    MEMORY,
-    ROCKSDB,
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VectorType {
+    Elasticsearch,
+    PgVectorRs,
 }
 
-impl From<String> for Storage {
+impl From<String> for VectorType {
     fn from(value: String) -> Self {
-        if value.eq_ignore_ascii_case("MEMORY") {
-            Storage::MEMORY
+        if value.to_lowercase().eq("elasticsearch") {
+            VectorType::Elasticsearch
         } else {
-            Storage::ROCKSDB
+            VectorType::PgVectorRs
         }
     }
 }
 
+
+/// elasticsearch配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct ElasticsearchConfig {
+    pub host: String,
+    pub port: String,
+    pub user: String,
+    pub password: String,
+}
+
 /// 阿里云百炼配置
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AliyunBailianConfig {
     /// API Key
     pub api_key: String,
@@ -85,16 +79,25 @@ pub struct AliyunBailianConfig {
     pub workspace_id: Option<String>,
 }
 
+/// PgVector-RS配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct PgvectorRsConfig {
+    pub host: String,
+    pub port: String,
+    pub user: String,
+    pub password: String,
+    pub database: String,
+}
+
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            dimension: 384,
-            model_name: "simple".to_string(),
-            api_endpoint: None,
-            api_key: None,
-            aliyun_config: None,
-            surrealdb_storage: Storage::MEMORY,
-            surrealdb_path: None,
+            model_type: "simple".to_string(),
+            dimension: 1024,
+            vector_type: VectorType::PgVectorRs,
+            aliyun: None,
+            pgvectorrs: None,
+            elasticsearch: None,
         }
     }
 }
@@ -120,34 +123,6 @@ impl Settings {
 
         s.try_deserialize()
     }
-
-    /// 转换为 EmbeddingConfig
-    pub fn to_embedding_config(&self) -> EmbeddingConfig {
-        if let Some(embedding_settings) = &self.embedding {
-            let aliyun_config =
-                embedding_settings
-                    .aliyun
-                    .as_ref()
-                    .map(|aliyun| AliyunBailianConfig {
-                        api_key: aliyun.api_key.clone(),
-                        model: aliyun.model.clone(),
-                        endpoint: aliyun.endpoint.clone(),
-                        workspace_id: aliyun.workspace_id.clone(),
-                    });
-
-            EmbeddingConfig {
-                dimension: embedding_settings.dimension,
-                model_name: embedding_settings.model_type.clone(),
-                api_endpoint: None,
-                api_key: None,
-                aliyun_config,
-                surrealdb_storage: embedding_settings.surrealdb_storage.clone().into(),
-                surrealdb_path: embedding_settings.surrealdb_path.clone(),
-            }
-        } else {
-            EmbeddingConfig::default()
-        }
-    }
 }
 
 impl Default for Settings {
@@ -162,13 +137,20 @@ impl Default for Settings {
                 max_connections: 5,
                 mcp_call_max_connections: 2,
             },
-            embedding: Some(EmbeddingSettings {
+            embedding: EmbeddingConfig {
                 model_type: "simple".to_string(),
-                dimension: 384,
+                dimension: 1024,
+                vector_type: VectorType::Elasticsearch,
                 aliyun: None,
-                surrealdb_storage: "memory".to_string(),
-                surrealdb_path: None,
-            }),
+                pgvectorrs: Some(PgvectorRsConfig {
+                    database: "mcp".to_string(),
+                    user: "postgres".to_string(),
+                    password: "mcp123456".to_string(),
+                    host: "localhost".to_string(),
+                    port: "5432".to_string(),
+                }),
+                elasticsearch: None,
+            },
         }
     }
 }

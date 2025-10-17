@@ -33,7 +33,7 @@ use handlers::*;
 use middleware::{cors_layer, logging};
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use services::{EndpointService, StartupLoaderService, SwaggerService};
+use services::{EndpointService, SwaggerService};
 use state::AppState;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tower::ServiceBuilder;
@@ -82,29 +82,14 @@ async fn main() -> anyhow::Result<()> {
     let mcp_service = Arc::new(McpService::new((*db_pool).clone()));
 
     // Initialize EmbeddingService
-    let embedding_config = settings.to_embedding_config();
-    let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config)?);
+    let embedding_config = settings.embedding;
+    let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config.clone())?);
     tracing::info!("EmbeddingService initialized");
 
     // Create interface retrieval state
-    let interface_retrieval_state = InterfaceRetrievalState::new(embedding_service.clone())
+    let interface_retrieval_state = InterfaceRetrievalState::new(embedding_config, embedding_service.clone())
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
-
-    // 自动加载endpoints表中的swagger信息到SurrealDB
-    tracing::info!("开始自动加载endpoints表中的swagger信息...");
-    let startup_loader = StartupLoaderService::new(
-        endpoint_service.clone(),
-        interface_retrieval_state.service.clone(),
-    );
-
-    if let Err(e) = startup_loader.load_all_swagger_data().await {
-        tracing::error!("自动加载swagger数据失败: {}", e);
-        // 注意：这里不返回错误，允许应用继续启动，即使swagger数据加载失败
-        tracing::warn!("应用将继续启动，但swagger数据可能不完整");
-    } else {
-        tracing::info!("swagger数据自动加载完成");
-    }
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
 

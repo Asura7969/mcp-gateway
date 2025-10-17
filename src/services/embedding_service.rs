@@ -1,9 +1,6 @@
-use crate::config::{EmbeddingConfig, Storage};
+use crate::config::{EmbeddingConfig};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use surrealdb::engine::local::{Db, Mem, RocksDb};
-use surrealdb::Surreal;
-use tracing::{info, warn};
 
 /// 阿里云百炼嵌入请求结构
 #[derive(Debug, Serialize)]
@@ -68,28 +65,6 @@ impl EmbeddingService {
         }
     }
 
-    pub async fn new_db(&self) -> Result<Surreal<Db>> {
-        match self.config.surrealdb_storage {
-            Storage::MEMORY => {
-                warn!("SurrealDB storage type: memory");
-                Surreal::new::<Mem>(())
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to create memory database: {}", e))
-            }
-            Storage::ROCKSDB => {
-                info!("SurrealDB storage type: rocksdb");
-                let path = self
-                    .config
-                    .surrealdb_path
-                    .as_deref()
-                    .unwrap_or("./db/data.db");
-                Surreal::new::<RocksDb>(path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to create RocksDB database: {}", e))
-            }
-        }
-    }
-
     /// 从配置创建向量化服务
     pub fn from_config(config: EmbeddingConfig) -> Result<Self> {
         Ok(Self::new(config))
@@ -97,7 +72,7 @@ impl EmbeddingService {
 
     /// 获取文本的向量表示
     pub async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
-        match &self.config.aliyun_config {
+        match &self.config.aliyun {
             Some(_) => self.aliyun_embed_text(text).await,
             None => Err(anyhow::anyhow!("Missing config")),
         }
@@ -105,14 +80,14 @@ impl EmbeddingService {
 
     /// 获取模型名称
     pub fn get_model_name(&self) -> &str {
-        &self.config.model_name
+        &self.config.model_type
     }
 
     /// 使用阿里云百炼 API 进行文本向量化
     async fn aliyun_embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let config = self
             .config
-            .aliyun_config
+            .aliyun
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("阿里云百炼配置未设置"))?;
 
@@ -173,7 +148,8 @@ impl EmbeddingService {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Settings;
+    use tracing::warn;
+    use crate::config::{Settings, VectorType};
     use super::*;
 
     #[tokio::test]
@@ -182,7 +158,7 @@ mod tests {
 
         // 使用配置文件中的设置
         let settings = Settings::new().expect("Failed to load settings");
-        let embedding_config = settings.to_embedding_config();
+        let embedding_config = settings.embedding;
 
         let service = EmbeddingService::new(embedding_config);
 
@@ -200,11 +176,11 @@ mod tests {
         // 从环境变量加载配置
         let settings = Settings::new().expect("Failed to load settings");
 
-        let config = settings.to_embedding_config();
+        let config = settings.embedding;
         let service = EmbeddingService::new(config);
 
         // 验证配置是否正确加载
-        assert!(service.config.aliyun_config.is_some());
+        assert!(service.config.aliyun.is_some());
 
         let vec = service.embed_text("测试数据").await.unwrap();
         assert!(vec.len() > 0);
@@ -218,7 +194,7 @@ mod tests {
             Settings::default()
         });
 
-        let embedding_config = settings.to_embedding_config();
+        let embedding_config = settings.embedding;
         warn!("embedding_config: {:?}", embedding_config);
 
         let service = EmbeddingService::new(embedding_config);
@@ -331,65 +307,4 @@ mod tests {
          println!("   - 所有 embedding 维度均为: {}", expected_dimension);
      }
 
-    #[tokio::test]
-    async fn test_embedding_dimension_consistency_mock() {
-        use crate::config::{AliyunBailianConfig, EmbeddingConfig, Storage};
-
-        // 创建测试配置，设置 dimensions 为 1024
-        let aliyun_config = AliyunBailianConfig {
-            api_key: "mock_api_key".to_string(),
-            model: "text-embedding-v4".to_string(),
-            endpoint: "https://mock.endpoint.com/embeddings".to_string(),
-            workspace_id: None,
-        };
-
-        let embedding_config = EmbeddingConfig {
-            dimension: 1024, // 设置为 1024 维度
-            model_name: "aliyun".to_string(),
-            api_endpoint: None,
-            api_key: None,
-            aliyun_config: Some(aliyun_config),
-            surrealdb_storage: Storage::MEMORY,
-            surrealdb_path: None,
-        };
-
-        let service = EmbeddingService::new(embedding_config);
-
-        // 验证配置正确设置
-        assert_eq!(service.config.dimension, 1024);
-        assert!(service.config.aliyun_config.is_some());
-        
-        let aliyun_config = service.config.aliyun_config.as_ref().unwrap();
-        assert_eq!(aliyun_config.model, "text-embedding-v4");
-        assert_eq!(aliyun_config.api_key, "mock_api_key");
-
-        println!("✅ 模拟测试通过：embedding 服务配置正确");
-        println!("📊 配置验证:");
-        println!("   - 维度设置: {}", service.config.dimension);
-        println!("   - 模型名称: {}", service.config.model_name);
-        println!("   - 阿里云模型: {}", aliyun_config.model);
-        
-        // 测试不同长度的文本（模拟场景）
-        let test_texts = vec![
-            "短文本",
-            "这是一个中等长度的测试文本，用于验证向量化服务的稳定性。",
-            "这是一个相对较长的测试文本，包含了更多的信息和内容。我们使用这个文本来测试向量化服务在处理不同长度文本时的表现。",
-        ];
-
-        println!("📝 模拟测试场景:");
-        for (i, text) in test_texts.iter().enumerate() {
-            println!("   文本 {} (长度: {} 字符): {}", 
-                i + 1, 
-                text.chars().count(), 
-                if text.len() > 30 { 
-                    format!("{}...", &text.chars().take(30).collect::<String>()) 
-                } else { 
-                    text.to_string() 
-                }
-            );
-        }
-
-        println!("🎯 测试目标: 验证所有文本调用 aliyun_embed_text 时，dimensions 参数都设置为 1024");
-        println!("✅ 模拟测试完成：配置和逻辑验证通过");
-    }
 }

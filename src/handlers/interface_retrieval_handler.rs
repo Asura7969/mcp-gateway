@@ -1,7 +1,5 @@
 use crate::models::interface_retrieval::*;
-use crate::services::interface_retrieval_service::{
-    InterfaceRetrievalService, ParseSwaggerRequest,
-};
+use crate::services::interface_retrieval_service::InterfaceRetrievalService;
 use crate::services::EmbeddingService;
 use axum::{
     extract::{Path, State},
@@ -13,6 +11,7 @@ use axum::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use crate::config::EmbeddingConfig;
 
 /// 接口关系处理器的应用状态
 #[derive(Clone)]
@@ -22,9 +21,10 @@ pub struct InterfaceRetrievalState {
 
 impl InterfaceRetrievalState {
     pub async fn new(
+        embedding_config: EmbeddingConfig,
         embedding_service: Arc<EmbeddingService>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let service = Arc::new(InterfaceRetrievalService::new(embedding_service).await?);
+        let service = Arc::new(InterfaceRetrievalService::new(&embedding_config, embedding_service).await?);
         Ok(Self { service })
     }
 }
@@ -93,9 +93,9 @@ pub async fn delete_project_data(
 pub async fn parse_swagger_json(
     State(state): State<InterfaceRetrievalState>,
     Json(request): Json<SwaggerParseRequest>,
-) -> Result<Json<SwaggerParseResponse>, (StatusCode, Json<InterfaceRelationError>)> {
+) -> Result<Json<bool>, (StatusCode, Json<InterfaceRelationError>)> {
     tracing::info!("Parsing Swagger JSON for project: {}", request.project_id);
-    let start_time = Instant::now();
+    let _start_time = Instant::now();
 
     // 验证请求数据
     if request.project_id.trim().is_empty() {
@@ -108,42 +108,9 @@ pub async fn parse_swagger_json(
             }),
         ));
     }
-
-    // 转换请求格式
-    let service_request = ParseSwaggerRequest {
-        project_id: request.project_id.clone(),
-        swagger_json: request.swagger_json,
-    };
-
-    match state.service.parse_and_store_swagger(service_request).await {
+    match state.service.parse_and_store_swagger(request).await {
         Ok(_) => {
-            let processing_time = start_time.elapsed().as_millis() as u64;
-
-            // 获取项目接口数量作为存储数量的估算
-            let stored_count = match state
-                .service
-                .get_project_interfaces(&request.project_id)
-                .await
-            {
-                Ok(interfaces) => interfaces.len() as u32,
-                Err(_) => 0,
-            };
-
-            let response = SwaggerParseResponse {
-                parsed_interfaces_count: stored_count,
-                stored_interfaces_count: stored_count,
-                dependencies_count: 0, // 暂时不支持依赖关系
-                processing_time_ms: processing_time,
-                errors: vec![],
-                warnings: vec![],
-            };
-
-            tracing::info!(
-                "Swagger parsing completed: {} interfaces stored in {}ms",
-                stored_count,
-                processing_time
-            );
-            Ok(Json(response))
+            Ok(Json(true))
         }
         Err(e) => {
             tracing::error!("Failed to parse Swagger JSON: {}", e);

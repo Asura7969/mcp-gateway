@@ -48,3 +48,5 @@ monitoring/data/
 config/local.*
 config/production.*
 config/development.toml
+
+docker/volumes/*

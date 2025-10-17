@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
-    use crate::models::interface_retrieval::{
-        InterfaceSearchRequest,
-    };
+    use crate::models::interface_retrieval::{InterfaceSearchRequest, SwaggerParseRequest};
     use crate::services::{
         embedding_service::EmbeddingService, interface_retrieval_service::InterfaceRetrievalService,
     };
@@ -26,13 +24,13 @@ mod integration_tests {
 
         // 为测试创建模拟的向量嵌入配置
 
-        let embedding_config = settings.to_embedding_config();
+        let embedding_config = settings.embedding;
         let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config.clone())?);
         info!("Test embedding config: {:?}", embedding_config);
 
         // 创建服务实例
         let interface_retrieval_service = Arc::new(
-            InterfaceRetrievalService::new(embedding_service.clone()).await?
+            InterfaceRetrievalService::new(&embedding_config, embedding_service.clone()).await?
         );
 
         Ok((interface_retrieval_service, embedding_service))
@@ -44,21 +42,15 @@ mod integration_tests {
     async fn test_search_functionality_without_data() -> Result<()> {
         // 设置测试环境
         let (interface_service, _embedding_service) = setup_test_environment().await?;
-
-        let project_id = "test-project".to_string();
-
         info!("开始测试搜索功能（无数据状态）");
 
         // 创建搜索请求 - 只使用关键词搜索以避免网络调用
         let search_request = InterfaceSearchRequest {
             query: "user management".to_string(),
-            project_id: Some(project_id.clone()),
-            max_results: Some(10),
-            enable_vector_search: Some(false), // 禁用向量搜索以避免网络调用
-            enable_keyword_search: Some(true),  // 只使用关键词搜索
-            vector_search_weight: None,
+            search_type: crate::models::interface_retrieval::SearchType::Keyword,
+            max_results: 10,
             similarity_threshold: None,
-            search_mode: Some("keyword".to_string()),
+            vector_weight: None,
             filters: None,
         };
 
@@ -185,10 +177,11 @@ mod integration_tests {
         });
 
         // 使用parse_and_store_swagger存储数据
-        use crate::services::interface_retrieval_service::ParseSwaggerRequest;
-        let parse_request = ParseSwaggerRequest {
+        let parse_request = SwaggerParseRequest {
             project_id: "test_project".to_string(),
             swagger_json,
+            version: None,
+            generate_embeddings: None,
         };
 
         let store_result = interface_service.parse_and_store_swagger(parse_request).await;
@@ -217,13 +210,10 @@ mod integration_tests {
         // 测试向量检索功能 - 搜索与"用户"相关的接口
         let search_request = InterfaceSearchRequest {
             query: "用户列表".to_string(),
-            project_id: Some("test_project".to_string()),
-            max_results: Some(10),
-            enable_vector_search: Some(true),
-            enable_keyword_search: Some(true),
-            vector_search_weight: None,
+            search_type: crate::models::interface_retrieval::SearchType::Hybrid,
+            max_results: 10,
             similarity_threshold: None,
-            search_mode: None,
+            vector_weight: None,
             filters: None,
         };
 
@@ -243,13 +233,10 @@ mod integration_tests {
         // 测试另一个搜索查询
         let search_request2 = InterfaceSearchRequest {
             query: "根据ID获取".to_string(),
-            project_id: Some("test_project".to_string()),
-            max_results: Some(10),
-            enable_vector_search: Some(true),
-            enable_keyword_search: Some(true),
-            vector_search_weight: None,
+            search_type: crate::models::interface_retrieval::SearchType::Vector,
+            max_results: 10,
             similarity_threshold: None,
-            search_mode: None,
+            vector_weight: None,
             filters: None,
         };
 

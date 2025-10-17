@@ -1,0 +1,55 @@
+# 基于 pgvecto-rs 镜像
+FROM tensorchord/pgvecto-rs:pg16-v0.3.0
+
+# 切换到 root 用户进行安装
+USER root
+
+# 更新包管理器并安装必要的依赖
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    postgresql-server-dev-16 \
+    git \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 下载并安装 SCWS (Simple Chinese Word Segmentation)
+WORKDIR /tmp
+RUN wget http://www.xunsearch.com/scws/down/scws-1.2.3.tar.bz2 \
+    && tar xjf scws-1.2.3.tar.bz2 \
+    && cd scws-1.2.3 \
+    && ./configure --prefix=/usr/local/scws \
+    && make && make install \
+    && cd .. \
+    && rm -rf scws-1.2.3*
+
+# 下载并安装 zhparser
+RUN git clone https://github.com/amutu/zhparser.git \
+    && cd zhparser \
+    && SCWS_HOME=/usr/local/scws make && make install \
+    && cd .. \
+    && rm -rf zhparser
+
+# 下载中文词典文件
+RUN mkdir -p /usr/local/scws/etc \
+    && cd /usr/local/scws/etc \
+    && wget http://www.xunsearch.com/scws/down/scws-dict-chs-gbk.tar.bz2 \
+    && wget http://www.xunsearch.com/scws/down/scws-dict-chs-utf8.tar.bz2 \
+    && tar xjf scws-dict-chs-gbk.tar.bz2 \
+    && tar xjf scws-dict-chs-utf8.tar.bz2 \
+    && rm -f *.tar.bz2
+
+# 创建初始化脚本目录
+RUN mkdir -p /docker-entrypoint-initdb.d
+
+# 复制初始化脚本
+COPY init-zhparser.sql /docker-entrypoint-initdb.d/
+
+# 设置环境变量
+ENV SCWS_HOME=/usr/local/scws
+
+# 切换回 postgres 用户
+USER postgres
+
+# 暴露端口
+EXPOSE 5432
