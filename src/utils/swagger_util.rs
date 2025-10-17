@@ -153,7 +153,6 @@ pub fn create_mcp_tool(
     operation: &crate::models::Operation,
     spec: &SwaggerSpec, // Add spec parameter
 ) -> anyhow::Result<McpTool> {
-
     let title = operation
         .summary
         .clone()

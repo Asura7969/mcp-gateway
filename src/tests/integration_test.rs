@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
+    use crate::config::Settings;
     use crate::models::interface_retrieval::{InterfaceSearchRequest, SwaggerParseRequest};
     use crate::services::{
         embedding_service::EmbeddingService, interface_retrieval_service::InterfaceRetrievalService,
@@ -7,13 +8,10 @@ mod integration_tests {
     use anyhow::Result;
     use std::sync::Arc;
     use tracing::info;
-    use crate::config::Settings;
 
     /// 设置测试环境
-    async fn setup_test_environment() -> Result<(
-        Arc<InterfaceRetrievalService>,
-        Arc<EmbeddingService>,
-    )> {
+    async fn setup_test_environment(
+    ) -> Result<(Arc<InterfaceRetrievalService>, Arc<EmbeddingService>)> {
         // 初始化日志
         let _ = tracing_subscriber::fmt::try_init();
 
@@ -30,13 +28,11 @@ mod integration_tests {
 
         // 创建服务实例
         let interface_retrieval_service = Arc::new(
-            InterfaceRetrievalService::new(&embedding_config, embedding_service.clone()).await?
+            InterfaceRetrievalService::new(&embedding_config, embedding_service.clone()).await?,
         );
 
         Ok((interface_retrieval_service, embedding_service))
     }
-
-
 
     #[tokio::test]
     async fn test_search_functionality_without_data() -> Result<()> {
@@ -59,9 +55,18 @@ mod integration_tests {
         let results = interface_service.search_interfaces(search_request).await?;
 
         // 验证搜索功能正常工作（即使没有数据）
-        assert_eq!(results.total_count, 0, "Should return 0 results when no data is stored");
-        assert!(results.interfaces.is_empty(), "Should return empty interface list");
-        assert_eq!(results.search_mode, "keyword", "Should use keyword search mode");
+        assert_eq!(
+            results.total_count, 0,
+            "Should return 0 results when no data is stored"
+        );
+        assert!(
+            results.interfaces.is_empty(),
+            "Should return empty interface list"
+        );
+        assert_eq!(
+            results.search_mode, "keyword",
+            "Should use keyword search mode"
+        );
 
         info!("搜索功能测试完成：");
         info!("  - Total count: {}", results.total_count);
@@ -103,7 +108,7 @@ mod integration_tests {
                             },
                             {
                                 "name": "limit",
-                                "in": "query", 
+                                "in": "query",
                                 "description": "每页数量",
                                 "required": false,
                                 "schema": {
@@ -184,24 +189,40 @@ mod integration_tests {
             generate_embeddings: None,
         };
 
-        let store_result = interface_service.parse_and_store_swagger(parse_request).await;
-        assert!(store_result.is_ok(), "存储Swagger数据失败: {:?}", store_result.err());
+        let store_result = interface_service
+            .parse_and_store_swagger(parse_request)
+            .await;
+        assert!(
+            store_result.is_ok(),
+            "存储Swagger数据失败: {:?}",
+            store_result.err()
+        );
 
         // 验证数据已存储 - 通过项目ID查询接口
-        let project_interfaces = interface_service.get_project_interfaces("test_project").await;
-        assert!(project_interfaces.is_ok(), "查询项目接口失败: {:?}", project_interfaces.err());
-        
+        let project_interfaces = interface_service
+            .get_project_interfaces("test_project")
+            .await;
+        assert!(
+            project_interfaces.is_ok(),
+            "查询项目接口失败: {:?}",
+            project_interfaces.err()
+        );
+
         let interfaces = project_interfaces.unwrap();
         assert_eq!(interfaces.len(), 2, "应该存储了2个接口");
 
         // 验证接口内容
-        let get_users = interfaces.iter().find(|i| i.path == "/users" && i.method == "GET");
+        let get_users = interfaces
+            .iter()
+            .find(|i| i.path == "/users" && i.method == "GET");
         assert!(get_users.is_some(), "应该找到GET /users接口");
         let get_users = get_users.unwrap();
         assert_eq!(get_users.summary, Some("获取用户列表".to_string()));
         assert!(get_users.embedding.is_some(), "接口应该有向量嵌入");
 
-        let get_user_by_id = interfaces.iter().find(|i| i.path == "/users/{id}" && i.method == "GET");
+        let get_user_by_id = interfaces
+            .iter()
+            .find(|i| i.path == "/users/{id}" && i.method == "GET");
         assert!(get_user_by_id.is_some(), "应该找到GET /users/{{id}}接口");
         let get_user_by_id = get_user_by_id.unwrap();
         assert_eq!(get_user_by_id.summary, Some("根据ID获取用户".to_string()));
@@ -218,16 +239,21 @@ mod integration_tests {
         };
 
         let search_result = interface_service.search_interfaces(search_request).await;
-        assert!(search_result.is_ok(), "向量搜索失败: {:?}", search_result.err());
+        assert!(
+            search_result.is_ok(),
+            "向量搜索失败: {:?}",
+            search_result.err()
+        );
 
         let result = search_result.unwrap();
         assert!(result.interfaces.len() > 0, "应该能搜索到相关接口");
         assert!(result.total_count > 0, "总数应该大于0");
 
         // 验证搜索结果包含预期的接口
-        let found_get_users = result.interfaces.iter().any(|interface_with_score| 
-            interface_with_score.interface.path == "/users" && interface_with_score.interface.method == "GET"
-        );
+        let found_get_users = result.interfaces.iter().any(|interface_with_score| {
+            interface_with_score.interface.path == "/users"
+                && interface_with_score.interface.method == "GET"
+        });
         assert!(found_get_users, "搜索结果应该包含GET /users接口");
 
         // 测试另一个搜索查询
@@ -241,19 +267,25 @@ mod integration_tests {
         };
 
         let search_result2 = interface_service.search_interfaces(search_request2).await;
-        assert!(search_result2.is_ok(), "第二次向量搜索失败: {:?}", search_result2.err());
+        assert!(
+            search_result2.is_ok(),
+            "第二次向量搜索失败: {:?}",
+            search_result2.err()
+        );
 
         let result2 = search_result2.unwrap();
         assert!(result2.interfaces.len() > 0, "第二次搜索应该能找到相关接口");
 
         // 验证能找到根据ID获取用户的接口
-        let found_get_user_by_id = result2.interfaces.iter().any(|interface_with_score| 
-            interface_with_score.interface.path == "/users/{id}" && interface_with_score.interface.method == "GET"
+        let found_get_user_by_id = result2.interfaces.iter().any(|interface_with_score| {
+            interface_with_score.interface.path == "/users/{id}"
+                && interface_with_score.interface.method == "GET"
+        });
+        assert!(
+            found_get_user_by_id,
+            "搜索结果应该包含GET /users/{{id}}接口"
         );
-        assert!(found_get_user_by_id, "搜索结果应该包含GET /users/{{id}}接口");
 
         Ok(())
     }
-
-
 }

@@ -1,3 +1,4 @@
+use crate::config::EmbeddingConfig;
 use crate::models::interface_retrieval::*;
 use crate::services::interface_retrieval_service::InterfaceRetrievalService;
 use crate::services::EmbeddingService;
@@ -11,7 +12,6 @@ use axum::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use crate::config::EmbeddingConfig;
 
 /// 接口关系处理器的应用状态
 #[derive(Clone)]
@@ -24,7 +24,8 @@ impl InterfaceRetrievalState {
         embedding_config: EmbeddingConfig,
         embedding_service: Arc<EmbeddingService>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let service = Arc::new(InterfaceRetrievalService::new(&embedding_config, embedding_service).await?);
+        let service =
+            Arc::new(InterfaceRetrievalService::new(&embedding_config, embedding_service).await?);
         Ok(Self { service })
     }
 }
@@ -109,9 +110,7 @@ pub async fn parse_swagger_json(
         ));
     }
     match state.service.parse_and_store_swagger(request).await {
-        Ok(_) => {
-            Ok(Json(true))
-        }
+        Ok(_) => Ok(Json(true)),
         Err(e) => {
             tracing::error!("Failed to parse Swagger JSON: {}", e);
             Err((

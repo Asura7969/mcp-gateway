@@ -1,4 +1,4 @@
-use crate::config::{EmbeddingConfig};
+use crate::config::EmbeddingConfig;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -141,16 +141,19 @@ impl EmbeddingService {
 
         // 添加调试日志，打印返回的向量信息
         let embedding = &api_response.output.embeddings[0].embedding;
-        tracing::debug!("阿里云百炼 API 返回向量数据: {:?}", &api_response.output.embeddings);
+        tracing::debug!(
+            "阿里云百炼 API 返回向量数据: {:?}",
+            &api_response.output.embeddings
+        );
         Ok(embedding.clone())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tracing::warn;
-    use crate::config::{Settings, VectorType};
     use super::*;
+    use crate::config::{Settings, VectorType};
+    use tracing::warn;
 
     #[tokio::test]
     async fn test_embedding_service_creation() {
@@ -188,7 +191,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_aliyun_embed_text_dimension_consistency() {
-
         let settings = Settings::new().unwrap_or_else(|_| {
             warn!("Failed to load configuration, using defaults");
             Settings::default()
@@ -222,36 +224,37 @@ mod tests {
         let mut all_embeddings = Vec::new();
 
         for (i, text) in test_texts.iter().enumerate() {
-            println!("📝 测试文本 {} (长度: {} 字符): {}", 
-                i + 1, 
-                text.chars().count(), 
-                if text.len() > 50 { 
-                    format!("{}...", &text.chars().take(50).collect::<String>()) 
-                } else { 
-                    text.to_string() 
+            println!(
+                "📝 测试文本 {} (长度: {} 字符): {}",
+                i + 1,
+                text.chars().count(),
+                if text.len() > 50 {
+                    format!("{}...", &text.chars().take(50).collect::<String>())
+                } else {
+                    text.to_string()
                 }
             );
 
             match service.aliyun_embed_text(text).await {
                 Ok(embedding) => {
                     println!("✅ 成功获取 embedding，维度: {}", embedding.len());
-                    
+
                     // 验证 embedding 长度是否为 1024
                     assert_eq!(
-                        embedding.len(), 
-                        1024, 
-                        "文本 '{}' 的 embedding 维度应该是 1024，但实际是 {}", 
-                        text, 
+                        embedding.len(),
+                        1024,
+                        "文本 '{}' 的 embedding 维度应该是 1024，但实际是 {}",
+                        text,
                         embedding.len()
                     );
-                    
+
                     // 验证 embedding 不全为零
                     assert!(
                         embedding.iter().any(|&x| x != 0.0),
                         "文本 '{}' 的 embedding 不应该全为零",
                         text
                     );
-                    
+
                     all_embeddings.push(embedding);
                 }
                 Err(e) => {
@@ -278,20 +281,21 @@ mod tests {
         if all_embeddings.len() >= 2 {
             let first_embedding = &all_embeddings[0];
             let second_embedding = &all_embeddings[1];
-            
+
             // 计算余弦相似度，确保不同文本的向量不完全相同
-            let dot_product: f32 = first_embedding.iter()
+            let dot_product: f32 = first_embedding
+                .iter()
                 .zip(second_embedding.iter())
                 .map(|(a, b)| a * b)
                 .sum();
-            
+
             let norm_a: f32 = first_embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
             let norm_b: f32 = second_embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-            
+
             let cosine_similarity = dot_product / (norm_a * norm_b);
-            
+
             println!("📊 前两个文本的余弦相似度: {:.4}", cosine_similarity);
-            
+
             // 确保相似度不是 1.0（即不完全相同）
             assert!(
                 cosine_similarity < 0.99,
@@ -301,10 +305,9 @@ mod tests {
         }
 
         println!("🎉 所有测试通过！embedding 维度一致性验证成功。");
-         println!("📈 测试统计:");
-         println!("   - 测试文本数量: {}", test_texts.len());
-         println!("   - 期望维度: {}", expected_dimension);
-         println!("   - 所有 embedding 维度均为: {}", expected_dimension);
-     }
-
+        println!("📈 测试统计:");
+        println!("   - 测试文本数量: {}", test_texts.len());
+        println!("   - 期望维度: {}", expected_dimension);
+        println!("   - 所有 embedding 维度均为: {}", expected_dimension);
+    }
 }

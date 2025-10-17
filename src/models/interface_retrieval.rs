@@ -1,8 +1,8 @@
 use crate::models::endpoint::ApiDetail;
+use crate::services::Filter;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
-use crate::services::Filter;
 
 /// 接口节点 - 表示一个API接口，基于ApiDetail结构设计
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -166,7 +166,6 @@ pub struct SwaggerParseRequest {
     pub generate_embeddings: Option<bool>,
 }
 
-
 /// 接口检索请求
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InterfaceSearchRequest {
@@ -183,7 +182,6 @@ pub struct InterfaceSearchRequest {
     /// 过滤条件
     pub filters: Option<Filter>,
 }
-
 
 /// 接口检索响应
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

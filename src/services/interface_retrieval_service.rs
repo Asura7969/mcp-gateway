@@ -1,10 +1,9 @@
+use crate::config::{EmbeddingConfig, VectorType};
 use crate::models::interface_retrieval::*;
 use crate::services::{ElasticSearch, EmbeddingService, PgvectorRsSearch, Search};
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Instant;
-use crate::config::{EmbeddingConfig, VectorType};
-
 
 /// 接口关系服务 - 重新设计用于swagger解析和向量搜索
 pub struct InterfaceRetrievalService {
@@ -13,15 +12,19 @@ pub struct InterfaceRetrievalService {
 
 impl InterfaceRetrievalService {
     /// 创建新的服务实例
-    pub async fn new(config: &EmbeddingConfig,
-                     embedding_service: Arc<EmbeddingService>) -> Result<Self> {
+    pub async fn new(
+        config: &EmbeddingConfig,
+        embedding_service: Arc<EmbeddingService>,
+    ) -> Result<Self> {
         let search: Box<dyn Search> = match config.vector_type {
-            VectorType::Elasticsearch => Box::new(ElasticSearch::new(config, embedding_service.clone()).await?),
-            VectorType::PgVectorRs => Box::new(PgvectorRsSearch::new(config, embedding_service.clone()).await?),
+            VectorType::Elasticsearch => {
+                Box::new(ElasticSearch::new(config, embedding_service.clone()).await?)
+            }
+            VectorType::PgVectorRs => {
+                Box::new(PgvectorRsSearch::new(config, embedding_service.clone()).await?)
+            }
         };
-        let service = Self {
-            search,
-        };
+        let service = Self { search };
         Ok(service)
     }
 
@@ -35,7 +38,6 @@ impl InterfaceRetrievalService {
         &self,
         request: InterfaceSearchRequest,
     ) -> Result<InterfaceSearchResponse> {
-
         let _start_time = Instant::now();
         let chunks = self.search.hybrid_search(request).await?;
         // todo: 依据chunks 查询数据库接口详情

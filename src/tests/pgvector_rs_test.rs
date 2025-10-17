@@ -128,7 +128,6 @@ mod tests {
         }
     }
 
-
     #[tokio::test]
     async fn test_pgvector_rs_service_creation() {
         let settings = Settings::new().unwrap();
@@ -146,7 +145,7 @@ mod tests {
 
                 // 测试项目ID
                 let test_project_id = Uuid::new_v4();
-                
+
                 // 1. 测试存储数据
                 println!("🔄 测试存储接口数据...");
 
@@ -165,24 +164,23 @@ mod tests {
                 // 2. 测试向量检索数据
                 println!("🔍 测试向量检索数据...");
                 let search_query = "用户id";
-                match service.vector_search(
-                    search_query,
-                    5,
-                    0.5,
-                    None
-                ).await {
+                match service.vector_search(search_query, 5, 0.5, None).await {
                     Ok(chunks) => {
                         println!("✅ 向量检索成功，找到 {} 个结果", chunks.len());
-                        
+
                         // 验证检索结果
                         if !chunks.is_empty() {
                             let chunk = &chunks[0];
                             println!("📊 最佳匹配: {} (相似度: {:.3})", chunk.meta, chunk.score);
-                            
+
                             // 验证项目ID匹配
                             if let Some(project_id) = chunk.meta.get("project_id") {
                                 let stored_project_id = project_id.as_str().unwrap_or("");
-                                assert_eq!(stored_project_id, test_project_id.to_string(), "项目ID应该匹配");
+                                assert_eq!(
+                                    stored_project_id,
+                                    test_project_id.to_string(),
+                                    "项目ID应该匹配"
+                                );
                             }
                         }
                     }
@@ -194,14 +192,10 @@ mod tests {
 
                 // 3. 测试关键词检索
                 println!("🔍 测试关键词检索数据...");
-                match service.keyword_search(
-                    "user",
-                    10,
-                    None
-                ).await {
+                match service.keyword_search("user", 10, None).await {
                     Ok(chunks) => {
                         println!("✅ 关键词检索成功，找到 {} 个结果", chunks.len());
-                        
+
                         // 验证检索结果包含关键词
                         for chunk in &chunks {
                             let text = &chunk.text;
@@ -223,20 +217,22 @@ mod tests {
                     prefix_path: Some("/api/users".to_string()),
                 };
 
-                match service.vector_search(
-                    "retrieve user information",
-                    5,
-                    0.3,
-                    Some(&filters)
-                ).await {
+                match service
+                    .vector_search("retrieve user information", 5, 0.3, Some(&filters))
+                    .await
+                {
                     Ok(chunks) => {
                         println!("✅ 带过滤器的检索成功，找到 {} 个结果", chunks.len());
-                        
+
                         // 验证过滤器效果
                         for chunk in &chunks {
                             let meta = &chunk.meta;
                             let meta_str = serde_json::to_string(meta).unwrap();
-                            assert_eq!(meta.get("method").unwrap().as_str().unwrap(), "GET", "方法应该是GET");
+                            assert_eq!(
+                                meta.get("method").unwrap().as_str().unwrap(),
+                                "GET",
+                                "方法应该是GET"
+                            );
                             assert!(meta_str.contains("/api/users"), "路径应该包含/api/users");
                         }
                     }
@@ -248,17 +244,15 @@ mod tests {
 
                 // 5. 测试删除数据
                 println!("🗑️ 测试删除项目数据...");
-                match service.delete_project_data(test_project_id.to_string().as_str()).await {
+                match service
+                    .delete_project_data(test_project_id.to_string().as_str())
+                    .await
+                {
                     Ok(message) => {
                         println!("✅ 数据删除成功: {}", message);
-                        
+
                         // 验证数据已被删除 - 再次检索应该返回空结果
-                        match service.vector_search(
-                            search_query,
-                            5,
-                            0.5,
-                            None
-                        ).await {
+                        match service.vector_search(search_query, 5, 0.5, None).await {
                             Ok(results) => {
                                 assert!(results.is_empty(), "删除后检索应该返回空结果");
                                 println!("✅ 验证删除成功：检索返回空结果");
@@ -283,8 +277,4 @@ mod tests {
             }
         }
     }
-
-
-
-
 }

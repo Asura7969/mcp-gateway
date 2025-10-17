@@ -1,22 +1,22 @@
+use crate::config::EmbeddingConfig;
 use crate::models::interface_retrieval::*;
 use crate::models::swagger::SwaggerSpec;
 use crate::services::{merge_content, Chunk, EmbeddingService, Filter, Search};
 use crate::utils::generate_api_details;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use std::sync::Arc;
-use elasticsearch::{BulkParts, DeleteByQueryParts, Elasticsearch, SearchParts};
-use elasticsearch::http::transport::{Transport};
+use elasticsearch::http::transport::Transport;
 use elasticsearch::indices::IndicesCreateParts;
+use elasticsearch::{BulkParts, DeleteByQueryParts, Elasticsearch, SearchParts};
 use serde_json::{json, Map, Number, Value};
-use tracing::{debug, info};
+use std::sync::Arc;
 use tracing::log::error;
+use tracing::{debug, info};
 use uuid::Uuid;
-use crate::config::EmbeddingConfig;
 
 const INDEX: &str = "interface_v2";
 
-impl From<&Value> for Chunk{
+impl From<&Value> for Chunk {
     fn from(hit: &Value) -> Self {
         let source = &hit["_source"];
         let score = hit["_score"].as_f64().unwrap_or(0.0);
@@ -50,17 +50,18 @@ pub struct ElasticSearch {
 
 impl ElasticSearch {
     /// 创建新的服务实例
-    pub async fn new(config: &EmbeddingConfig,
-                     embedding_service: Arc<EmbeddingService>) -> Result<Self> {
+    pub async fn new(
+        config: &EmbeddingConfig,
+        embedding_service: Arc<EmbeddingService>,
+    ) -> Result<Self> {
         let elastic_config = config
             .elasticsearch
             .as_ref()
             .ok_or_else(|| anyhow!("Elasticsearch configuration not found"))?;
-        let url = format!(r#"http://{}:{}@{}:{}"#,
-                          elastic_config.user,
-                          elastic_config.password,
-                          elastic_config.host,
-                          elastic_config.port);
+        let url = format!(
+            r#"http://{}:{}@{}:{}"#,
+            elastic_config.user, elastic_config.password, elastic_config.host, elastic_config.port
+        );
 
         let transport = Transport::single_node(&url)?;
         let client = Elasticsearch::new(transport);
@@ -78,7 +79,8 @@ impl ElasticSearch {
 
     /// 初始化数据库schema
     async fn init_schema(&self) -> Result<()> {
-        let create_response = self.client
+        let create_response = self
+            .client
             .indices()
             .create(IndicesCreateParts::Index(INDEX))
             .body(json!({
@@ -106,47 +108,52 @@ impl ElasticSearch {
                     }
                 }
             }))
-                .send()
-                .await?;
+            .send()
+            .await?;
         if create_response.status_code().is_success() {
             info!("Index '{}' created successfully!", INDEX);
             Ok(())
         } else {
-            Err(anyhow!("Failed to create index. Response: {:?}", create_response))
+            Err(anyhow!(
+                "Failed to create index. Response: {:?}",
+                create_response
+            ))
         }
     }
 
     /// 存储接口到数据库
-    async fn store_interfaces(
-        &self,
-        interfaces: &[ApiInterface],
-        project_id: &str,
-    ) -> Result<u32> {
-
+    async fn store_interfaces(&self, interfaces: &[ApiInterface], project_id: &str) -> Result<u32> {
         let mut body: Vec<String> = Vec::new();
 
         for interface in interfaces {
-            body.push(json!({
-                "index": {
-                    "_index": INDEX,
-                    "_id": Uuid::new_v4().to_string().as_str()
-                }
-            }).to_string());
+            body.push(
+                json!({
+                    "index": {
+                        "_index": INDEX,
+                        "_id": Uuid::new_v4().to_string().as_str()
+                    }
+                })
+                .to_string(),
+            );
 
             let text = merge_content(interface);
             let embedding = self.embedding_service.embed_text(&text).await?;
-            body.push(json!({
-                "page_content": text,
-                "vector": embedding,
-                "metadata": {
-                    "project_id": project_id,
-                    "path": interface.path,
-                    "method": interface.method
-                }
-            }).to_string());
+            body.push(
+                json!({
+                    "page_content": text,
+                    "vector": embedding,
+                    "metadata": {
+                        "project_id": project_id,
+                        "path": interface.path,
+                        "method": interface.method
+                    }
+                })
+                .to_string(),
+            );
         }
 
-        let response = self.client
+        let response = self
+            .client
             .bulk(BulkParts::Index(INDEX))
             .body(body)
             .send()
@@ -184,17 +191,21 @@ impl ElasticSearch {
         filter
     }
 
-    fn build_knn(&self,
-                 query_vector: Vec<Value>,
-                 max_results: u32,
-                 filters: Option<&Filter>,
-                 weight: Option<f32>,
+    fn build_knn(
+        &self,
+        query_vector: Vec<Value>,
+        max_results: u32,
+        filters: Option<&Filter>,
+        weight: Option<f32>,
     ) -> Map<String, Value> {
         let mut knn = serde_json::map::Map::new();
         knn.insert("field".to_string(), Value::String("vector".to_string()));
         knn.insert("query_vector".to_string(), Value::Array(query_vector));
         knn.insert("k".to_string(), Value::Number(Number::from(max_results)));
-        knn.insert("num_candidates".to_string(), Value::Number(Number::from(10000)));
+        knn.insert(
+            "num_candidates".to_string(),
+            Value::Number(Number::from(10000)),
+        );
         if let Some(w) = weight {
             knn.insert("boost".to_string(), json!(w));
         }
@@ -204,7 +215,6 @@ impl ElasticSearch {
         }
         knn
     }
-
 }
 
 #[async_trait]
@@ -269,7 +279,10 @@ impl Search for ElasticSearch {
         filters: Option<&Filter>,
     ) -> Result<Vec<Chunk>> {
         // 获取查询向量
-        let query_embedding = self.embedding_service.embed_text(query).await?
+        let query_embedding = self
+            .embedding_service
+            .embed_text(query)
+            .await?
             .into_iter()
             .map(|embedding| embedding.into())
             .collect();
@@ -278,11 +291,18 @@ impl Search for ElasticSearch {
 
         let knn = self.build_knn(query_embedding, max_results, filters, None);
         root.insert("knn".to_string(), Value::Object(knn));
-        root.insert("fields".to_string(), Value::Array(vec![Value::String("page_content".to_string()), Value::String("metadata".to_string())]));
+        root.insert(
+            "fields".to_string(),
+            Value::Array(vec![
+                Value::String("page_content".to_string()),
+                Value::String("metadata".to_string()),
+            ]),
+        );
         root.insert("_source".to_string(), Value::Bool(false));
         root.insert("size".to_string(), Value::Number(Number::from(max_results)));
 
-        let search_response = self.client
+        let search_response = self
+            .client
             .search(SearchParts::Index(&[INDEX]))
             .body(Value::Object(root))
             .send()
@@ -320,13 +340,14 @@ impl Search for ElasticSearch {
         max_results: u32,
         filters: Option<&Filter>,
     ) -> Result<Vec<Chunk>> {
-
         let mut bool = serde_json::map::Map::new();
         let mut must = serde_json::map::Map::new();
-        must.insert("match".to_string(),
-                    json!({
-                            "page_content": query,
-                        }));
+        must.insert(
+            "match".to_string(),
+            json!({
+                "page_content": query,
+            }),
+        );
 
         bool.insert("must".to_string(), Value::Object(must));
         let filter = self.build_filter(filters);
@@ -334,17 +355,20 @@ impl Search for ElasticSearch {
             bool.insert("filter".to_string(), Value::Array(filter));
         }
 
-        bool.insert("sort".to_string(),
-                    Value::Array(vec![json!({
-                        "_score": {
-                            "order": "desc"
-                        }
-                    })]));
+        bool.insert(
+            "sort".to_string(),
+            Value::Array(vec![json!({
+                "_score": {
+                    "order": "desc"
+                }
+            })]),
+        );
         let mut root = serde_json::map::Map::new();
         root.insert("bool".to_string(), Value::Object(bool));
         root.insert("size".to_string(), Value::Number(Number::from(max_results)));
 
-        let search_response = self.client
+        let search_response = self
+            .client
             .search(SearchParts::Index(&[INDEX]))
             .body(Value::Object(root))
             .send()
@@ -385,31 +409,41 @@ impl Search for ElasticSearch {
     ///   "size": 10
     /// }
     /// ```
-    async fn hybrid_search(
-        &self,
-        request: InterfaceSearchRequest
-    ) -> Result<Vec<Chunk>> {
+    async fn hybrid_search(&self, request: InterfaceSearchRequest) -> Result<Vec<Chunk>> {
         let mut bool = serde_json::map::Map::new();
         let mut _match = serde_json::map::Map::new();
 
         let (vector_weight, keyword_weight) = match &request.vector_weight {
             None => (0.0f32, 1f32),
-            Some(vector_weight) => (*vector_weight, 1.0 - vector_weight)
+            Some(vector_weight) => (*vector_weight, 1.0 - vector_weight),
         };
-        _match.insert("match".to_string(),
-                    json!({
-                            "page_content": &request.query,
-                            "boost": keyword_weight,
-                        }));
+        _match.insert(
+            "match".to_string(),
+            json!({
+                "page_content": &request.query,
+                "boost": keyword_weight,
+            }),
+        );
 
-        let query_embedding = self.embedding_service.embed_text(&request.query).await?
+        let query_embedding = self
+            .embedding_service
+            .embed_text(&request.query)
+            .await?
             .into_iter()
             .map(|embedding| embedding.into())
             .collect();
 
-        let knn = self.build_knn(query_embedding, request.max_results, request.filters.as_ref(), Some(vector_weight));
+        let knn = self.build_knn(
+            query_embedding,
+            request.max_results,
+            request.filters.as_ref(),
+            Some(vector_weight),
+        );
 
-        bool.insert("must".to_string(), Value::Array(vec![Value::Object(_match), Value::Object(knn)]));
+        bool.insert(
+            "must".to_string(),
+            Value::Array(vec![Value::Object(_match), Value::Object(knn)]),
+        );
         let filter = self.build_filter(request.filters.as_ref());
         if !filter.is_empty() {
             bool.insert("filter".to_string(), Value::Array(filter));
@@ -418,9 +452,13 @@ impl Search for ElasticSearch {
         let mut query = serde_json::map::Map::new();
         query.insert("bool".to_string(), Value::Object(bool));
         root.insert("query".to_string(), Value::Object(query));
-        root.insert("size".to_string(), Value::Number(Number::from(request.max_results)));
+        root.insert(
+            "size".to_string(),
+            Value::Number(Number::from(request.max_results)),
+        );
 
-        let search_response = self.client
+        let search_response = self
+            .client
             .search(SearchParts::Index(&[INDEX]))
             .body(Value::Object(root))
             .send()
@@ -450,21 +488,24 @@ impl Search for ElasticSearch {
         let filter = Filter {
             project_id: Some(project_id.to_string()),
             prefix_path: None,
-            methods: None
+            methods: None,
         };
         let filter = self.build_filter(Some(&filter));
         bool.insert("filter".to_string(), Value::Array(filter));
 
-        bool.insert("sort".to_string(),
-                    Value::Array(vec![json!({
-                        "_score": {
-                            "order": "desc"
-                        }
-                    })]));
+        bool.insert(
+            "sort".to_string(),
+            Value::Array(vec![json!({
+                "_score": {
+                    "order": "desc"
+                }
+            })]),
+        );
         let mut root = serde_json::map::Map::new();
         root.insert("bool".to_string(), Value::Object(bool));
 
-        let search_response = self.client
+        let search_response = self
+            .client
             .search(SearchParts::Index(&[INDEX]))
             .body(Value::Object(root))
             .send()
@@ -475,7 +516,8 @@ impl Search for ElasticSearch {
     }
 
     async fn delete_project_data(&self, project_id: &str) -> Result<u64> {
-        let response = self.client
+        let response = self
+            .client
             .delete_by_query(DeleteByQueryParts::Index(&[INDEX]))
             .body(json!({
                 "query": {

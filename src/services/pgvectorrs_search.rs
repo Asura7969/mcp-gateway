@@ -6,13 +6,13 @@ use crate::utils::generate_api_details;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
+use chrono::{DateTime, Utc};
+use serde_json::json;
+use sqlx::postgres::{PgPoolOptions, PgRow};
+use sqlx::{Pool, Postgres, Row};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
-use serde_json::json;
-use sqlx::{Pool, Postgres, Row};
-use sqlx::postgres::{PgPoolOptions, PgRow};
 use tracing::info;
 use uuid::Uuid;
 
@@ -86,14 +86,14 @@ impl PgvectorRsSearch {
     /// 初始化数据库schema
     async fn init_schema(&self) -> Result<()> {
         // 创建pgvecto-rs扩展
-        sqlx::query(
-            r#"CREATE EXTENSION IF NOT EXISTS vectors"#
-        ).execute(&self.pool)
+        sqlx::query(r#"CREATE EXTENSION IF NOT EXISTS vectors"#)
+            .execute(&self.pool)
             .await?;
 
         // meta: project_id, method, path,
         // embedding: summary, description, service_description
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS interfaces_v2 (
                 id UUID PRIMARY KEY,
                 text TEXT NOT NULL,
@@ -103,12 +103,14 @@ impl PgvectorRsSearch {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             ) using heap;
-        "#
-        ).execute(&self.pool)
-            .await?;
+        "#,
+        )
+        .execute(&self.pool)
+        .await?;
 
         // 创建索引
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE INDEX IF NOT EXISTS idx_embedding
             ON interfaces_v2 USING vectors(embedding vector_l2_ops)
             WITH (options = $$
@@ -119,32 +121,29 @@ impl PgvectorRsSearch {
                     m=30
                     ef_construction=500
                     $$);
-        "#
-        ).execute(&self.pool)
-            .await?;
+        "#,
+        )
+        .execute(&self.pool)
+        .await?;
 
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE INDEX IF NOT EXISTS idx_fts ON interfaces_v2 USING GIN (text_tsvector)
-        "#
-        ).execute(&self.pool)
-            .await?;
+        "#,
+        )
+        .execute(&self.pool)
+        .await?;
         // todo: 添加meta字段索引
 
         info!("PgVector-RS schema initialized successfully");
         Ok(())
     }
 
-
     /// 存储接口到数据库
-    async fn store_interfaces(
-        &self,
-        interfaces: &[ApiInterface],
-        project_id: &str,
-    ) -> Result<u64> {
+    async fn store_interfaces(&self, interfaces: &[ApiInterface], project_id: &str) -> Result<u64> {
         let mut stored_count = 0;
 
         for interface in interfaces {
-
             // 插入或更新接口
             let meta_value = json!({
                 "project_id": project_id,
@@ -157,19 +156,20 @@ impl PgvectorRsSearch {
             let embedding = self.embedding_service.embed_text(&text).await?;
             // let embedding_vector_str = format!("[{}]", embedding.iter().map(|f| f.to_string()).collect::<Vec<_>>().join(","));
 
-            let result = sqlx::query("
+            let result = sqlx::query(
+                "
                 INSERT INTO interfaces_v2 (
                     id, text, text_tsvector, meta, embedding, created_at, updated_at
                 ) VALUES ($1, $2, to_tsvector('chinese_zh', $3), $4, $5, NOW(), NOW())
-                "
+                ",
             )
-                .bind(Uuid::new_v4())
-                .bind(text.clone())
-                .bind(text)
-                .bind(meta_value)
-                .bind(embedding)
-                .execute(&self.pool)
-                .await?;
+            .bind(Uuid::new_v4())
+            .bind(text.clone())
+            .bind(text)
+            .bind(meta_value)
+            .bind(embedding)
+            .execute(&self.pool)
+            .await?;
 
             stored_count += result.rows_affected()
         }
@@ -230,7 +230,8 @@ impl Search for PgvectorRsSearch {
             FROM interfaces_v2
             ORDER BY score
             LIMIT $2
-        "#.to_string();
+        "#
+        .to_string();
 
         // let mut param_count = 1;
         // let mut boxed_params: Vec<Box<dyn tokio_postgres::types::ToSql + Send + Sync>> = vec![
@@ -269,10 +270,7 @@ impl Search for PgvectorRsSearch {
             .fetch_all(&self.pool)
             .await?;
 
-        let results: Vec<Chunk> = rows
-            .iter()
-            .map(Chunk::from)
-            .collect();
+        let results: Vec<Chunk> = rows.iter().map(Chunk::from).collect();
 
         Ok(results)
     }
@@ -283,7 +281,6 @@ impl Search for PgvectorRsSearch {
         max_results: u32,
         filter: Option<&Filter>,
     ) -> Result<Vec<Chunk>> {
-
         let mut params = vec![ParamValue::Text(query.to_string())];
         let mut sql = r#"
             SELECT
@@ -339,33 +336,34 @@ impl Search for PgvectorRsSearch {
         // 执行查询
         let rows = query.fetch_all(&self.pool).await?;
 
-        let results = rows.iter()
-            .map(Chunk::from)
-            .collect::<Vec<Chunk>>();
+        let results = rows.iter().map(Chunk::from).collect::<Vec<Chunk>>();
 
         Ok(results)
     }
 
-    async fn hybrid_search(
-        &self,
-        request: InterfaceSearchRequest
-    ) -> Result<Vec<Chunk>> {
+    async fn hybrid_search(&self, request: InterfaceSearchRequest) -> Result<Vec<Chunk>> {
         // 执行向量搜索，传递过滤器
         let vector_results = self
-            .vector_search(request.query.as_str(),
-                           request.max_results * 2,
-                           request.similarity_threshold.unwrap_or(0.5),
-                           request.filters.as_ref())
+            .vector_search(
+                request.query.as_str(),
+                request.max_results * 2,
+                request.similarity_threshold.unwrap_or(0.5),
+                request.filters.as_ref(),
+            )
             .await?;
 
         let (vector_weight, _) = match &request.vector_weight {
             None => (0.0f32, 1f32),
-            Some(vector_weight) => (*vector_weight, 1.0 - vector_weight)
+            Some(vector_weight) => (*vector_weight, 1.0 - vector_weight),
         };
 
         // 执行关键词搜索，传递过滤器
         let keyword_results = self
-            .keyword_search(request.query.as_str(), request.max_results * 2, request.filters.as_ref())
+            .keyword_search(
+                request.query.as_str(),
+                request.max_results * 2,
+                request.filters.as_ref(),
+            )
             .await?;
 
         // 合并结果并计算混合分数
@@ -397,7 +395,11 @@ impl Search for PgvectorRsSearch {
 
         // 转换为向量并排序
         let mut results: Vec<Chunk> = combined_results.into_values().collect();
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // 限制结果数量
         results.truncate(request.max_results as usize);
@@ -406,15 +408,16 @@ impl Search for PgvectorRsSearch {
     }
 
     async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<Chunk>> {
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT * FROM interfaces_v2 WHERE meta->>'project_id' = $1 ORDER BY path, method
-        "#).bind(project_id)
-            .fetch_all(&self.pool)
-            .await?;
+        "#,
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
 
-        let result = rows.iter()
-            .map(Chunk::from)
-            .collect::<Vec<Chunk>>();
+        let result = rows.iter().map(Chunk::from).collect::<Vec<Chunk>>();
         Ok(result)
     }
 
@@ -424,6 +427,5 @@ impl Search for PgvectorRsSearch {
             .execute(&self.pool)
             .await?;
         Ok(pqr.rows_affected())
-
     }
 }

@@ -56,7 +56,6 @@ impl From<String> for VectorType {
     }
 }
 
-
 /// elasticsearch配置
 #[derive(Debug, Clone, Deserialize)]
 pub struct ElasticsearchConfig {

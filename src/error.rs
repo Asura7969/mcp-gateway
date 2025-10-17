@@ -16,4 +16,3 @@ impl IntoResponse for Error {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(self.to_string())).into_response()
     }
 }
-

@@ -30,17 +30,13 @@ pub trait Search: Send + Sync {
     ) -> Result<Vec<Chunk>>;
 
     /// 混合搜索 - 结合向量搜索和关键词搜索
-    async fn hybrid_search(
-        &self,
-        request: InterfaceSearchRequest
-    ) -> Result<Vec<Chunk>>;
+    async fn hybrid_search(&self, request: InterfaceSearchRequest) -> Result<Vec<Chunk>>;
 
     /// 获取项目的所有接口
     async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<Chunk>>;
 
     /// 删除项目数据
     async fn delete_project_data(&self, project_id: &str) -> Result<u64>;
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,8 +59,13 @@ pub struct Filter {
 }
 
 pub fn merge_content(interface: &ApiInterface) -> String {
-    format!("{} | {} | {}",
-            &interface.summary.clone().unwrap_or("".to_string()),
-            &interface.description.clone().unwrap_or("".to_string()),
-            &interface.service_description.clone().unwrap_or("".to_string()))
+    format!(
+        "{} | {} | {}",
+        &interface.summary.clone().unwrap_or("".to_string()),
+        &interface.description.clone().unwrap_or("".to_string()),
+        &interface
+            .service_description
+            .clone()
+            .unwrap_or("".to_string())
+    )
 }
