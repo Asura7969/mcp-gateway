@@ -6,57 +6,6 @@ mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
 
-    /// 创建测试用的API接口
-    fn create_test_api_interface() -> ApiInterface {
-        ApiInterface {
-            path: "/api/users/{id}".to_string(),
-            method: "GET".to_string(),
-            summary: Some("Get user by ID".to_string()),
-            description: Some("Retrieve a specific user by their unique identifier".to_string()),
-            operation_id: Some("getUserById".to_string()),
-            path_params: vec![ApiParameter {
-                name: "id".to_string(),
-                param_type: "integer".to_string(),
-                required: true,
-                description: Some("User ID".to_string()),
-                example: Some("123".to_string()),
-                default_value: None,
-                enum_values: None,
-                format: Some("int64".to_string()),
-            }],
-            query_params: vec![ApiParameter {
-                name: "include_profile".to_string(),
-                param_type: "boolean".to_string(),
-                required: false,
-                description: Some("Include user profile information".to_string()),
-                example: Some("true".to_string()),
-                default_value: Some("false".to_string()),
-                enum_values: None,
-                format: None,
-            }],
-            header_params: vec![ApiParameter {
-                name: "Authorization".to_string(),
-                param_type: "string".to_string(),
-                required: true,
-                description: Some("Bearer token for authentication".to_string()),
-                example: Some("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...".to_string()),
-                default_value: None,
-                enum_values: None,
-                format: None,
-            }],
-            body_params: vec![],
-            request_schema: None,
-            response_schema: Some(r#"{"type":"object","properties":{"id":{"type":"integer"},"name":{"type":"string"},"email":{"type":"string"}}}"#.to_string()),
-            tags: vec!["users".to_string(), "profile".to_string()],
-            domain: Some("user-service".to_string()),
-            deprecated: false,
-            service_description: Some("User management service".to_string()),
-            embedding: Some(vec![0.1, 0.2, 0.3, 0.4, 0.5]),
-            embedding_model: Some("text-embedding-v4".to_string()),
-            embedding_updated_at: Some("2024-01-01T00:00:00Z".to_string()),
-        }
-    }
-
     /// 创建测试用的Swagger解析请求
     fn create_test_parse_request(project_id: String) -> SwaggerParseRequest {
         let swagger_json = serde_json::json!({

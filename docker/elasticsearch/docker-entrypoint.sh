@@ -4,7 +4,7 @@ set -e
 
 if ! /usr/share/elasticsearch/bin/elasticsearch-plugin list | grep -q analysis-ik; then
     printf '%s\n' "Installing the chinese language analyzer plugin"
-    if ! /usr/share/elasticsearch/bin/elasticsearch-plugin install analysis-ik; then
+    if ! /usr/share/elasticsearch/bin/elasticsearch-plugin install -b https://get.infini.cloud/elasticsearch/analysis-ik/8.14.3; then
         printf '%s\n' "Failed to install the chinese language analyzer plugin"
         exit 1
     fi

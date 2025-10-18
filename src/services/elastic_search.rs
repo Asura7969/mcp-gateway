@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use elasticsearch::http::transport::Transport;
 use elasticsearch::indices::IndicesCreateParts;
 use elasticsearch::{BulkParts, DeleteByQueryParts, Elasticsearch, SearchParts};
+use elasticsearch::indices::IndicesRefreshParts;
 use serde_json::{json, Map, Number, Value};
 use std::sync::Arc;
 use tracing::log::error;
@@ -21,13 +22,38 @@ impl From<&Value> for Chunk {
         let source = &hit["_source"];
         let score = hit["_score"].as_f64().unwrap_or(0.0);
         let metadata = &source["metadata"];
-        let uuid = Uuid::parse_str(source["_id"].as_str().unwrap_or("")).unwrap();
+        // 修复：_id 应该来自命中顶层而不是 _source
+        let uuid_str = hit["_id"].as_str().unwrap_or("");
+        let uuid = Uuid::parse_str(uuid_str).unwrap_or_else(|_| Uuid::new_v4());
+        
+        // 从Elasticsearch的vector字段读取嵌入向量
+        let embedding: Vec<f32> = source["vector"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+            .unwrap_or_else(Vec::new);
+        
+        let api_content = match source["api_content"].as_str() {
+            None => None,
+            Some(api_content_str) => {
+                let mut api_interface = serde_json::from_str::<ApiInterface>(api_content_str).unwrap();
+                // 如果嵌入向量全为零，则设置为None，否则设置为Some
+                api_interface.embedding = if embedding.iter().all(|&x| x == 0.0) {
+                    None
+                } else {
+                    Some(embedding.clone())
+                };
+                Some(api_interface)
+            }
+        };
+        
         Self {
             id: uuid,
-            text: source["page_content"].to_string(),
+            // 修复：避免使用 to_string() 导致带引号的 JSON 字符串
+            text: source["page_content"].as_str().unwrap_or("").to_string(),
             meta: metadata.clone(),
             score,
-            embedding: Vec::with_capacity(0),
+            embedding,
+            api_content,
             created_at: None,
             updated_at: None,
         }
@@ -91,6 +117,9 @@ impl ElasticSearch {
                             "analyzer": "ik_max_word",
                             "search_analyzer": "ik_smart"
                         },
+                        "api_content": {
+                            "type": "text",
+                        },
                         "vector": {
                             "type": "dense_vector",
                             "dims": 1024,
@@ -110,13 +139,14 @@ impl ElasticSearch {
             }))
             .send()
             .await?;
-        if create_response.status_code().is_success() {
-            info!("Index '{}' created successfully!", INDEX);
+        let status = create_response.status_code();
+        if status.is_success() || status.as_u16() == 400 {
+            info!("Index '{}' ready!", INDEX);
             Ok(())
         } else {
             Err(anyhow!(
-                "Failed to create index. Response: {:?}",
-                create_response
+                "Failed to create index. Status: {:?}",
+                status
             ))
         }
     }
@@ -138,10 +168,13 @@ impl ElasticSearch {
 
             let text = merge_content(interface);
             let embedding = self.embedding_service.embed_text(&text).await?;
+            let api_content = serde_json::to_string::<ApiInterface>(interface).unwrap();
+            
             body.push(
                 json!({
                     "page_content": text,
                     "vector": embedding,
+                    "api_content": api_content,
                     "metadata": {
                         "project_id": project_id,
                         "path": interface.path,
@@ -166,11 +199,84 @@ impl ElasticSearch {
         if let Some(errors) = response_body["errors"].as_bool() {
             if errors {
                 if let Some(items) = response_body["items"].as_array() {
-                    error_count -= items.len();
+                    error_count += items.len();
                     error!("Index errors: {:?}", items);
                 }
             }
         }
+
+        // 刷新索引以确保数据立即可搜索
+        let _refresh_response = self
+            .client
+            .indices()
+            .refresh(IndicesRefreshParts::Index(&[INDEX]))
+            .send()
+            .await?;
+
+        Ok((interfaces.len() - error_count) as u32)
+    }
+
+    async fn store_interfaces_without_embeddings(&self, interfaces: &[ApiInterface], project_id: &str) -> Result<u32> {
+        let mut body: Vec<String> = Vec::new();
+
+        for interface in interfaces {
+            body.push(
+                json!({
+                    "index": {
+                        "_index": INDEX,
+                        "_id": Uuid::new_v4().to_string().as_str()
+                    }
+                })
+                .to_string(),
+            );
+
+            let text = merge_content(interface);
+            // 使用零向量作为占位符
+            let embedding: Vec<f32> = vec![0.0; 1024];
+            let api_content = serde_json::to_string::<ApiInterface>(interface).unwrap();
+            
+            body.push(
+                json!({
+                    "page_content": text,
+                    "vector": embedding,
+                    "api_content": api_content,
+                    "metadata": {
+                        "project_id": project_id,
+                        "path": interface.path,
+                        "method": interface.method
+                    }
+                })
+                .to_string(),
+            );
+        }
+
+        let response = self
+            .client
+            .bulk(BulkParts::Index(INDEX))
+            .body(body)
+            .send()
+            .await?;
+        let response_body = response.json::<Value>().await?;
+
+        debug!("Response body: {:?}", response_body);
+
+        let mut error_count = 0;
+        if let Some(errors) = response_body["errors"].as_bool() {
+            if errors {
+                if let Some(items) = response_body["items"].as_array() {
+                    error_count += items.len();
+                    error!("Index errors: {:?}", items);
+                }
+            }
+        }
+
+        // 刷新索引以确保数据立即可搜索
+        let _refresh_response = self
+            .client
+            .indices()
+            .refresh(IndicesRefreshParts::Index(&[INDEX]))
+            .send()
+            .await?;
 
         Ok((interfaces.len() - error_count) as u32)
     }
@@ -179,7 +285,7 @@ impl ElasticSearch {
         let mut filter = vec![];
         if let Some(f) = filters {
             if let Some(pid) = &f.project_id {
-                filter.push(json!({"terms": {"metadata.project_id": [pid]}}));
+                filter.push(json!({"term": {"metadata.project_id": pid}}));
             }
             if let Some(methods) = &f.methods {
                 filter.push(json!({"terms": {"metadata.method": methods}}));
@@ -209,9 +315,16 @@ impl ElasticSearch {
         if let Some(w) = weight {
             knn.insert("boost".to_string(), json!(w));
         }
-        let filter = self.build_filter(filters);
-        if !filter.is_empty() {
-            knn.insert("filter".to_string(), Value::Array(filter));
+        let filter_clauses = self.build_filter(filters);
+        if !filter_clauses.is_empty() {
+            // 对于KNN查询，过滤器应该是一个完整的bool查询对象
+            let mut bool_obj = serde_json::map::Map::new();
+            bool_obj.insert("must".to_string(), Value::Array(filter_clauses));
+            
+            let mut filter_obj = serde_json::map::Map::new();
+            filter_obj.insert("bool".to_string(), Value::Object(bool_obj));
+            
+            knn.insert("filter".to_string(), Value::Object(filter_obj));
         }
         knn
     }
@@ -239,10 +352,12 @@ impl Search for ElasticSearch {
             })
             .collect();
 
-        // 存储接口
-        let stored_count = self
-            .store_interfaces(&interfaces, &request.project_id)
-            .await?;
+        // 根据generate_embeddings参数决定是否生成嵌入向量
+        let stored_count = if request.generate_embeddings.unwrap_or(false) {
+            self.store_interfaces(&interfaces, &request.project_id).await?
+        } else {
+            self.store_interfaces_without_embeddings(&interfaces, &request.project_id).await?
+        };
 
         info!(
             "Successfully stored {} interfaces for project {}",
@@ -252,30 +367,11 @@ impl Search for ElasticSearch {
         Ok(())
     }
 
-    ///
-    /// ```json
-    /// {
-    ///   "knn": {
-    ///       "field": "vector",
-    ///       "query_vector": query_embedding,
-    ///       "k": max_results,
-    ///       "num_candidates": 10000, // 每个分片考虑的候选向量数，影响精度和速度[8](@ref)
-    ///       "filter": [
-    ///           {"terms": {"metadata.project_id": ["project_123", "project_456"]}},
-    ///           {"terms": {"metadata.method": ["GET", "POST"]}},
-    ///           {"prefix": {"metadata.path": "/api/v1"}}
-    ///       ]
-    ///   },
-    ///   "fields": ["page_content", "metadata"],
-    ///   "_source": false,
-    ///   "size": max_results
-    /// }
-    /// ```
     async fn vector_search(
         &self,
         query: &str,
         max_results: u32,
-        _similarity_threshold: f32,
+        similarity_threshold: f32,
         filters: Option<&Filter>,
     ) -> Result<Vec<Chunk>> {
         // 获取查询向量
@@ -291,16 +387,13 @@ impl Search for ElasticSearch {
 
         let knn = self.build_knn(query_embedding, max_results, filters, None);
         root.insert("knn".to_string(), Value::Object(knn));
-        root.insert(
-            "fields".to_string(),
-            Value::Array(vec![
-                Value::String("page_content".to_string()),
-                Value::String("metadata".to_string()),
-            ]),
-        );
-        root.insert("_source".to_string(), Value::Bool(false));
+        // 返回完整 _source，便于解析 text 与 metadata
+        root.insert("_source".to_string(), Value::Bool(true));
         root.insert("size".to_string(), Value::Number(Number::from(max_results)));
 
+        let query_json = serde_json::to_string_pretty(&Value::Object(root.clone())).unwrap();
+        info!("🔍 Vector search query: {}", query_json);
+        
         let search_response = self
             .client
             .search(SearchParts::Index(&[INDEX]))
@@ -309,31 +402,16 @@ impl Search for ElasticSearch {
             .await?;
         let response_body = search_response.json::<Value>().await?;
 
-        extract_response(response_body)
+        let mut results = extract_response(response_body)?;
+        
+        // 应用相似度阈值过滤
+        if similarity_threshold > 0.0 {
+            results.retain(|chunk| chunk.score >= similarity_threshold as f64);
+        }
+        
+        Ok(results)
     }
 
-    ///
-    /// ```json
-    /// {
-    ///   "bool": {
-    ///       "must": {
-    ///           "match": {
-    ///               "page_content": query,
-    ///           }
-    ///       },
-    ///       "filter": [
-    ///           {"terms": { "metadata.document_id": ["project1", "project2"] }},
-    ///           {"terms": { "metadata.method": [ "GET", "POST"] }},
-    ///           {"prefix": { "metadata.path": "/api" }}
-    ///       ],
-    ///       "sort": [{
-    ///           "_score": {
-    ///               "order": "desc"
-    ///           }
-    ///       }],
-    ///   }
-    /// }
-    /// ```
     async fn keyword_search(
         &self,
         query: &str,
@@ -355,7 +433,13 @@ impl Search for ElasticSearch {
             bool.insert("filter".to_string(), Value::Array(filter));
         }
 
-        bool.insert(
+        let mut root = serde_json::map::Map::new();
+        // 修复：Elasticsearch 搜索必须包含 query 包裹 bool
+        let mut query_obj = serde_json::map::Map::new();
+        query_obj.insert("bool".to_string(), Value::Object(bool));
+        root.insert("query".to_string(), Value::Object(query_obj));
+        root.insert("size".to_string(), Value::Number(Number::from(max_results)));
+        root.insert(
             "sort".to_string(),
             Value::Array(vec![json!({
                 "_score": {
@@ -363,9 +447,9 @@ impl Search for ElasticSearch {
                 }
             })]),
         );
-        let mut root = serde_json::map::Map::new();
-        root.insert("bool".to_string(), Value::Object(bool));
-        root.insert("size".to_string(), Value::Number(Number::from(max_results)));
+
+        let query_json = serde_json::to_string_pretty(&Value::Object(root.clone())).unwrap();
+        info!("🔍 Keyword search query: {}", query_json);
 
         let search_response = self
             .client
@@ -378,113 +462,75 @@ impl Search for ElasticSearch {
         extract_response(response_body)
     }
 
-    /// ```json
-    /// {
-    ///   "query": {
-    ///     "bool": {
-    ///       "must": [{
-    ///           "match": {
-    ///             "page_content": {
-    ///               "query": "特定关键词",
-    ///               "boost": 0.8
-    ///             }
-    ///           }
-    ///         },{
-    ///           "knn": {
-    ///             "field": "vector",
-    ///             "query_vector": [0.12, 0.23, ...], // 1024维查询向量
-    ///             "k": 5,
-    ///             "num_candidates": 50,
-    ///             "boost": 0.2
-    ///           }
-    ///         }
-    ///       ],
-    ///       "filter": [ // 在这里添加所有过滤条件
-    ///         {"terms": {"metadata.project_id": ["project_123", "project_456"]}},
-    ///         {"terms": {"metadata.method": ["GET", "POST"]}},
-    ///         {"prefix": {"metadata.path": "/api/v1"}}
-    ///       ]
-    ///     }
-    ///   },
-    ///   "size": 10
-    /// }
-    /// ```
     async fn hybrid_search(&self, request: InterfaceSearchRequest) -> Result<Vec<Chunk>> {
-        let mut bool = serde_json::map::Map::new();
-        let mut _match = serde_json::map::Map::new();
-
         let (vector_weight, keyword_weight) = match &request.vector_weight {
-            None => (0.0f32, 1f32),
+            None => (0.5f32, 0.5f32), // 默认权重相等
             Some(vector_weight) => (*vector_weight, 1.0 - vector_weight),
         };
-        _match.insert(
-            "match".to_string(),
-            json!({
-                "page_content": &request.query,
-                "boost": keyword_weight,
-            }),
-        );
 
-        let query_embedding = self
-            .embedding_service
-            .embed_text(&request.query)
-            .await?
-            .into_iter()
-            .map(|embedding| embedding.into())
-            .collect();
-
-        let knn = self.build_knn(
-            query_embedding,
-            request.max_results,
+        let max_results = request.max_results;
+        
+        // 分别执行向量搜索和关键词搜索
+        let vector_results = self.vector_search(
+            &request.query,
+            max_results,
+            0.0, // 不在这里应用阈值，稍后统一处理
             request.filters.as_ref(),
-            Some(vector_weight),
-        );
+        ).await?;
 
-        bool.insert(
-            "must".to_string(),
-            Value::Array(vec![Value::Object(_match), Value::Object(knn)]),
-        );
-        let filter = self.build_filter(request.filters.as_ref());
-        if !filter.is_empty() {
-            bool.insert("filter".to_string(), Value::Array(filter));
+        let keyword_results = self.keyword_search(
+            &request.query,
+            max_results,
+            request.filters.as_ref(),
+        ).await?;
+
+        // 手动合并结果并应用权重
+        let mut combined_results: std::collections::HashMap<String, Chunk> = std::collections::HashMap::new();
+
+        // 添加向量搜索结果
+        for mut chunk in vector_results {
+            chunk.score = chunk.score * vector_weight as f64;
+            combined_results.insert(chunk.id.to_string(), chunk);
         }
-        let mut root = serde_json::map::Map::new();
-        let mut query = serde_json::map::Map::new();
-        query.insert("bool".to_string(), Value::Object(bool));
-        root.insert("query".to_string(), Value::Object(query));
-        root.insert(
-            "size".to_string(),
-            Value::Number(Number::from(request.max_results)),
-        );
 
-        let search_response = self
-            .client
-            .search(SearchParts::Index(&[INDEX]))
-            .body(Value::Object(root))
-            .send()
-            .await?;
-        let response_body = search_response.json::<Value>().await?;
+        // 添加关键词搜索结果，如果已存在则合并分数
+        for mut chunk in keyword_results {
+            chunk.score = chunk.score * keyword_weight as f64;
+            if let Some(existing) = combined_results.get_mut(&chunk.id.to_string()) {
+                existing.score += chunk.score;
+            } else {
+                combined_results.insert(chunk.id.to_string(), chunk);
+            }
+        }
 
-        extract_response(response_body)
+        // 转换为向量并按分数排序
+        let mut results: Vec<Chunk> = combined_results.into_values().collect();
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // 限制结果数量
+        results.truncate(max_results as usize);
+        
+        // 应用相似度阈值过滤
+        if let Some(threshold) = request.similarity_threshold {
+            if threshold > 0.0 {
+                results.retain(|chunk| chunk.score >= threshold as f64);
+            }
+        }
+        
+        println!("🔍 混合检索成功，找到 {} 个结果", results.len());
+        for (i, chunk) in results.iter().enumerate() {
+            println!("  结果 {}: ID={}, 分数={:.6}", i + 1, chunk.id, chunk.score);
+        }
+        
+        Ok(results)
     }
 
-    ///
-    /// ```json
-    /// {
-    ///   "bool": {
-    ///       "filter": [
-    ///           {"terms": { "metadata.document_id": ["project1"] }}
-    ///       ],
-    ///       "sort": [{
-    ///           "_score": {
-    ///               "order": "desc"
-    ///           }
-    ///       }],
-    ///   }
-    /// }
-    /// ```
     async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<Chunk>> {
         let mut bool = serde_json::map::Map::new();
+        
+        // 添加match_all查询
+        bool.insert("must".to_string(), json!([{"match_all": {}}]));
+        
         let filter = Filter {
             project_id: Some(project_id.to_string()),
             prefix_path: None,
@@ -493,16 +539,11 @@ impl Search for ElasticSearch {
         let filter = self.build_filter(Some(&filter));
         bool.insert("filter".to_string(), Value::Array(filter));
 
-        bool.insert(
-            "sort".to_string(),
-            Value::Array(vec![json!({
-                "_score": {
-                    "order": "desc"
-                }
-            })]),
-        );
         let mut root = serde_json::map::Map::new();
-        root.insert("bool".to_string(), Value::Object(bool));
+        let mut query_obj = serde_json::map::Map::new();
+        query_obj.insert("bool".to_string(), Value::Object(bool));
+        root.insert("query".to_string(), Value::Object(query_obj));
+        root.insert("size".to_string(), Value::Number(Number::from(100))); // 设置返回数量
 
         let search_response = self
             .client
@@ -521,8 +562,8 @@ impl Search for ElasticSearch {
             .delete_by_query(DeleteByQueryParts::Index(&[INDEX]))
             .body(json!({
                 "query": {
-                    "terms": {
-                        "metadata.project_id": [project_id]
+                    "term": {
+                        "metadata.project_id": project_id
                     }
                 }
             }))
@@ -530,6 +571,15 @@ impl Search for ElasticSearch {
             .await?;
 
         let response_body = response.json::<serde_json::Value>().await?;
+        
+        // 刷新索引以确保删除操作立即生效
+        let _refresh_response = self
+            .client
+            .indices()
+            .refresh(IndicesRefreshParts::Index(&[INDEX]))
+            .send()
+            .await?;
+            
         if let Some(deleted_count) = response_body["deleted"].as_u64() {
             Ok(deleted_count)
         } else {

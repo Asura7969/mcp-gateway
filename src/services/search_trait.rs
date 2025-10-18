@@ -46,11 +46,12 @@ pub struct Chunk {
     pub meta: Value,
     pub score: f64,
     pub embedding: Vec<f32>,
+    pub api_content: Option<ApiInterface>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Filter {
     pub project_id: Option<String>,
     // 路径前置过滤
@@ -58,6 +59,7 @@ pub struct Filter {
     pub methods: Option<Vec<String>>,
 }
 
+/// 需要向量化的内容
 pub fn merge_content(interface: &ApiInterface) -> String {
     format!(
         "{} | {} | {}",

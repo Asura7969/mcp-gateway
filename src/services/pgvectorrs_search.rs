@@ -20,12 +20,15 @@ impl From<&PgRow> for Chunk {
     fn from(row: &PgRow) -> Self {
         let created_at: DateTime<Utc> = row.get("created_at");
         let updated_at: DateTime<Utc> = row.get("updated_at");
+        let api_content: String = row.get("api_content");
+        let api_content = Some(serde_json::from_str::<ApiInterface>(api_content.as_str()).unwrap());
         Self {
             id: row.get("id"),
             text: row.get("text"),
             meta: row.get("meta"),
             score: row.get("score"),
             embedding: Vec::with_capacity(0),
+            api_content,
             created_at: Some(created_at),
             updated_at: Some(updated_at),
         }
@@ -97,6 +100,7 @@ impl PgvectorRsSearch {
             CREATE TABLE IF NOT EXISTS interfaces_v2 (
                 id UUID PRIMARY KEY,
                 text TEXT NOT NULL,
+                api_content TEXT NOT NULL,
                 text_tsvector TSVECTOR DEFAULT NULL,
                 meta JSONB NOT NULL,
                 embedding vector(1024) NOT NULL,
@@ -152,15 +156,14 @@ impl PgvectorRsSearch {
             });
 
             let text = merge_content(interface);
-
             let embedding = self.embedding_service.embed_text(&text).await?;
-            // let embedding_vector_str = format!("[{}]", embedding.iter().map(|f| f.to_string()).collect::<Vec<_>>().join(","));
+            let api_content = serde_json::to_string::<ApiInterface>(interface).unwrap();
 
             let result = sqlx::query(
                 "
                 INSERT INTO interfaces_v2 (
-                    id, text, text_tsvector, meta, embedding, created_at, updated_at
-                ) VALUES ($1, $2, to_tsvector('chinese_zh', $3), $4, $5, NOW(), NOW())
+                    id, text, text_tsvector, meta, embedding, created_at, updated_at, api_content
+                ) VALUES ($1, $2, to_tsvector('chinese_zh', $3), $4, $5, NOW(), NOW(), $6)
                 ",
             )
             .bind(Uuid::new_v4())
@@ -168,6 +171,7 @@ impl PgvectorRsSearch {
             .bind(text)
             .bind(meta_value)
             .bind(embedding)
+            .bind(api_content)
             .execute(&self.pool)
             .await?;
 
@@ -284,7 +288,7 @@ impl Search for PgvectorRsSearch {
         let mut params = vec![ParamValue::Text(query.to_string())];
         let mut sql = r#"
             SELECT
-                id, text, meta, created_at, updated_at,
+                id, text, meta, created_at, updated_at, api_content,
                 ts_rank(text_tsvector, websearch_to_tsquery('chinese_zh', $1)) AS score
             FROM interfaces_v2
         "#

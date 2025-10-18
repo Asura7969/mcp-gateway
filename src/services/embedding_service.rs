@@ -152,7 +152,7 @@ impl EmbeddingService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Settings, VectorType};
+    use crate::config::Settings;
     use tracing::warn;
 
     #[tokio::test]

@@ -1,9 +1,8 @@
 use crate::config::{EmbeddingConfig, VectorType};
 use crate::models::interface_retrieval::*;
-use crate::services::{ElasticSearch, EmbeddingService, PgvectorRsSearch, Search};
+use crate::services::{Chunk, ElasticSearch, EmbeddingService, PgvectorRsSearch, Search};
 use anyhow::Result;
 use std::sync::Arc;
-use std::time::Instant;
 
 /// 接口关系服务 - 重新设计用于swagger解析和向量搜索
 pub struct InterfaceRetrievalService {
@@ -37,29 +36,21 @@ impl InterfaceRetrievalService {
     pub async fn search_interfaces(
         &self,
         request: InterfaceSearchRequest,
-    ) -> Result<InterfaceSearchResponse> {
-        let _start_time = Instant::now();
-        let chunks = self.search.hybrid_search(request).await?;
-        // todo: 依据chunks 查询数据库接口详情
-        let _total_count = chunks.len() as u32;
-
-        // Ok(InterfaceSearchResponse {
-        //     interfaces,
-        //     query_time_ms: start_time.elapsed().as_millis() as u64,
-        //     total_count,
-        //     search_mode,
-        // });
-
-        todo!()
+    ) -> Result<Vec<Chunk>> {
+        Ok(self.search.hybrid_search(request).await?)
     }
 
     /// 获取项目的所有接口
     pub async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<ApiInterface>> {
-        let _chunks = self.search.get_project_interfaces(project_id).await?;
-        //
-        // Ok(records.into_iter().map(|r| r.interface).collect())
-
-        todo!()
+        let chunks = self.search.get_project_interfaces(project_id).await?;
+        
+        // 从chunks中提取ApiInterface
+        let interfaces = chunks
+            .into_iter()
+            .filter_map(|chunk| chunk.api_content)
+            .collect();
+        
+        Ok(interfaces)
     }
 
     /// 删除项目数据

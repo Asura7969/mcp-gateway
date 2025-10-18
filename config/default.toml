@@ -10,7 +10,7 @@ mcp_call_max_connections = 2
 [embedding]
 model_type = "simple"
 dimension = 1024
-vector_type="pgvectorrs"
+vector_type="elasticsearch"
 
 [embedding.pgvectorrs]
 host = "localhost"

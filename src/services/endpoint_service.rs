@@ -296,6 +296,31 @@ impl EndpointService {
         Ok(endpoint)
     }
 
+    pub async fn get_endpoint_by_name(&self, names: Vec<String>) -> Result<Vec<Endpoint>> {
+        if names.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // 构建IN子句的占位符
+        let placeholders: Vec<String> = (1..=names.len()).map(|i| format!("${}", i)).collect();
+        let in_clause = placeholders.join(", ");
+        
+        let query = format!(
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name IN ({}) AND status != 'deleted'",
+            in_clause
+        );
+
+        let mut query_builder = sqlx::query_as::<_, Endpoint>(&query);
+        
+        // 绑定每个名称参数
+        for name in names {
+            query_builder = query_builder.bind(name);
+        }
+        
+        let endpoints = query_builder.fetch_all(&self.pool).await?;
+        Ok(endpoints)
+    }
+
     pub async fn get_endpoint_detail(&self, id: Uuid) -> Result<EndpointDetailResponse> {
         let endpoint = self.get_endpoint_by_id(id).await?;
 
