@@ -142,8 +142,8 @@ impl EmbeddingService {
         // 添加调试日志，打印返回的向量信息
         let embedding = &api_response.output.embeddings[0].embedding;
         tracing::debug!(
-            "阿里云百炼 API 返回向量数据: {:?}",
-            &api_response.output.embeddings
+            "阿里云百炼 API 返回向量数据长度: {:?}",
+            &api_response.output.embeddings.len()
         );
         Ok(embedding.clone())
     }

@@ -11,6 +11,7 @@ use uuid::Uuid;
 pub trait Search: Send + Sync {
     /// 解析并存储Swagger文档
     async fn parse_and_store_swagger(&self, request: SwaggerParseRequest) -> Result<()>;
+    async fn store_interface(&self, interface: ApiInterface, project_id: String) -> Result<()>;
 
     /// 向量搜索 - 基于语义相似度
     async fn vector_search(
@@ -37,6 +38,8 @@ pub trait Search: Send + Sync {
 
     /// 删除项目数据
     async fn delete_project_data(&self, project_id: &str) -> Result<u64>;
+
+    async fn delete_by_meta(&self, meta: Meta) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +52,25 @@ pub struct Chunk {
     pub api_content: Option<ApiInterface>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl Chunk {
+    pub fn get_meta(&self) -> Meta {
+        serde_json::from_value::<Meta>(self.meta.clone()).unwrap()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Meta {
+    pub project_id: String,
+    pub path: String,
+    pub method: String,
+}
+
+impl Meta {
+    pub fn any_empty(&self) -> bool {
+        self.project_id.is_empty() || self.path.is_empty() || self.method.is_empty()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

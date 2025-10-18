@@ -46,4 +46,9 @@ export class EndpointsApiService {
   static async deleteEndpoint(id: string): Promise<void> {
     await api.delete(`/api/endpoint/${id}`)
   }
+
+  static async syncEndpoint(projectId: string): Promise<string> {
+    const response = await api.delete(`/api/interface-retrieval/projects/${projectId}`)
+    return response.data
+  }
 }

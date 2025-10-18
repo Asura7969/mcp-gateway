@@ -1,14 +1,14 @@
 use crate::config::EmbeddingConfig;
 use crate::models::interface_retrieval::*;
 use crate::models::swagger::SwaggerSpec;
-use crate::services::{merge_content, Chunk, EmbeddingService, Filter, Search};
+use crate::services::{merge_content, Chunk, EmbeddingService, Filter, Meta, Search};
 use crate::utils::generate_api_details;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use elasticsearch::http::transport::Transport;
 use elasticsearch::indices::IndicesCreateParts;
-use elasticsearch::{BulkParts, DeleteByQueryParts, Elasticsearch, SearchParts};
 use elasticsearch::indices::IndicesRefreshParts;
+use elasticsearch::{BulkParts, DeleteByQueryParts, Elasticsearch, SearchParts};
 use serde_json::{json, Map, Number, Value};
 use std::sync::Arc;
 use tracing::log::error;
@@ -25,17 +25,22 @@ impl From<&Value> for Chunk {
         // 修复：_id 应该来自命中顶层而不是 _source
         let uuid_str = hit["_id"].as_str().unwrap_or("");
         let uuid = Uuid::parse_str(uuid_str).unwrap_or_else(|_| Uuid::new_v4());
-        
+
         // 从Elasticsearch的vector字段读取嵌入向量
         let embedding: Vec<f32> = source["vector"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_f64().map(|f| f as f32))
+                    .collect()
+            })
             .unwrap_or_else(Vec::new);
-        
+
         let api_content = match source["api_content"].as_str() {
             None => None,
             Some(api_content_str) => {
-                let mut api_interface = serde_json::from_str::<ApiInterface>(api_content_str).unwrap();
+                let mut api_interface =
+                    serde_json::from_str::<ApiInterface>(api_content_str).unwrap();
                 // 如果嵌入向量全为零，则设置为None，否则设置为Some
                 api_interface.embedding = if embedding.iter().all(|&x| x == 0.0) {
                     None
@@ -45,7 +50,7 @@ impl From<&Value> for Chunk {
                 Some(api_interface)
             }
         };
-        
+
         Self {
             id: uuid,
             // 修复：避免使用 to_string() 导致带引号的 JSON 字符串
@@ -144,10 +149,7 @@ impl ElasticSearch {
             info!("Index '{}' ready!", INDEX);
             Ok(())
         } else {
-            Err(anyhow!(
-                "Failed to create index. Status: {:?}",
-                status
-            ))
+            Err(anyhow!("Failed to create index. Status: {:?}", status))
         }
     }
 
@@ -169,7 +171,7 @@ impl ElasticSearch {
             let text = merge_content(interface);
             let embedding = self.embedding_service.embed_text(&text).await?;
             let api_content = serde_json::to_string::<ApiInterface>(interface).unwrap();
-            
+
             body.push(
                 json!({
                     "page_content": text,
@@ -216,7 +218,11 @@ impl ElasticSearch {
         Ok((interfaces.len() - error_count) as u32)
     }
 
-    async fn store_interfaces_without_embeddings(&self, interfaces: &[ApiInterface], project_id: &str) -> Result<u32> {
+    async fn store_interfaces_without_embeddings(
+        &self,
+        interfaces: &[ApiInterface],
+        project_id: &str,
+    ) -> Result<u32> {
         let mut body: Vec<String> = Vec::new();
 
         for interface in interfaces {
@@ -234,7 +240,7 @@ impl ElasticSearch {
             // 使用零向量作为占位符
             let embedding: Vec<f32> = vec![0.0; 1024];
             let api_content = serde_json::to_string::<ApiInterface>(interface).unwrap();
-            
+
             body.push(
                 json!({
                     "page_content": text,
@@ -320,18 +326,45 @@ impl ElasticSearch {
             // 对于KNN查询，过滤器应该是一个完整的bool查询对象
             let mut bool_obj = serde_json::map::Map::new();
             bool_obj.insert("must".to_string(), Value::Array(filter_clauses));
-            
+
             let mut filter_obj = serde_json::map::Map::new();
             filter_obj.insert("bool".to_string(), Value::Object(bool_obj));
-            
+
             knn.insert("filter".to_string(), Value::Object(filter_obj));
         }
         knn
+    }
+
+    async fn delete(&self, body: Value) -> Result<Value> {
+        let response = self
+            .client
+            .delete_by_query(DeleteByQueryParts::Index(&[INDEX]))
+            .body(body)
+            .send()
+            .await?;
+
+        let response_body = response.json::<Value>().await?;
+
+        // 刷新索引以确保删除操作立即生效
+        let _refresh_response = self
+            .client
+            .indices()
+            .refresh(IndicesRefreshParts::Index(&[INDEX]))
+            .send()
+            .await?;
+        Ok(response_body)
     }
 }
 
 #[async_trait]
 impl Search for ElasticSearch {
+    async fn store_interface(&self, interface: ApiInterface, project_id: String) -> Result<()> {
+        let _ = self
+            .store_interfaces(&[interface], project_id.as_str())
+            .await?;
+        Ok(())
+    }
+
     async fn parse_and_store_swagger(&self, request: SwaggerParseRequest) -> Result<()> {
         info!("Parsing Swagger for project: {}", request.project_id);
 
@@ -354,9 +387,11 @@ impl Search for ElasticSearch {
 
         // 根据generate_embeddings参数决定是否生成嵌入向量
         let stored_count = if request.generate_embeddings.unwrap_or(false) {
-            self.store_interfaces(&interfaces, &request.project_id).await?
+            self.store_interfaces(&interfaces, &request.project_id)
+                .await?
         } else {
-            self.store_interfaces_without_embeddings(&interfaces, &request.project_id).await?
+            self.store_interfaces_without_embeddings(&interfaces, &request.project_id)
+                .await?
         };
 
         info!(
@@ -393,7 +428,7 @@ impl Search for ElasticSearch {
 
         let query_json = serde_json::to_string_pretty(&Value::Object(root.clone())).unwrap();
         info!("🔍 Vector search query: {}", query_json);
-        
+
         let search_response = self
             .client
             .search(SearchParts::Index(&[INDEX]))
@@ -403,12 +438,12 @@ impl Search for ElasticSearch {
         let response_body = search_response.json::<Value>().await?;
 
         let mut results = extract_response(response_body)?;
-        
+
         // 应用相似度阈值过滤
         if similarity_threshold > 0.0 {
             results.retain(|chunk| chunk.score >= similarity_threshold as f64);
         }
-        
+
         Ok(results)
     }
 
@@ -469,23 +504,24 @@ impl Search for ElasticSearch {
         };
 
         let max_results = request.max_results;
-        
-        // 分别执行向量搜索和关键词搜索
-        let vector_results = self.vector_search(
-            &request.query,
-            max_results,
-            0.0, // 不在这里应用阈值，稍后统一处理
-            request.filters.as_ref(),
-        ).await?;
 
-        let keyword_results = self.keyword_search(
-            &request.query,
-            max_results,
-            request.filters.as_ref(),
-        ).await?;
+        // 分别执行向量搜索和关键词搜索
+        let vector_results = self
+            .vector_search(
+                &request.query,
+                max_results,
+                0.0, // 不在这里应用阈值，稍后统一处理
+                request.filters.as_ref(),
+            )
+            .await?;
+
+        let keyword_results = self
+            .keyword_search(&request.query, max_results, request.filters.as_ref())
+            .await?;
 
         // 手动合并结果并应用权重
-        let mut combined_results: std::collections::HashMap<String, Chunk> = std::collections::HashMap::new();
+        let mut combined_results: std::collections::HashMap<String, Chunk> =
+            std::collections::HashMap::new();
 
         // 添加向量搜索结果
         for mut chunk in vector_results {
@@ -505,32 +541,36 @@ impl Search for ElasticSearch {
 
         // 转换为向量并按分数排序
         let mut results: Vec<Chunk> = combined_results.into_values().collect();
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // 限制结果数量
         results.truncate(max_results as usize);
-        
+
         // 应用相似度阈值过滤
         if let Some(threshold) = request.similarity_threshold {
             if threshold > 0.0 {
                 results.retain(|chunk| chunk.score >= threshold as f64);
             }
         }
-        
+
         println!("🔍 混合检索成功，找到 {} 个结果", results.len());
         for (i, chunk) in results.iter().enumerate() {
             println!("  结果 {}: ID={}, 分数={:.6}", i + 1, chunk.id, chunk.score);
         }
-        
+
         Ok(results)
     }
 
     async fn get_project_interfaces(&self, project_id: &str) -> Result<Vec<Chunk>> {
         let mut bool = serde_json::map::Map::new();
-        
+
         // 添加match_all查询
         bool.insert("must".to_string(), json!([{"match_all": {}}]));
-        
+
         let filter = Filter {
             project_id: Some(project_id.to_string()),
             prefix_path: None,
@@ -558,30 +598,41 @@ impl Search for ElasticSearch {
 
     async fn delete_project_data(&self, project_id: &str) -> Result<u64> {
         let response = self
-            .client
-            .delete_by_query(DeleteByQueryParts::Index(&[INDEX]))
-            .body(json!({
+            .delete(json!({
                 "query": {
                     "term": {
                         "metadata.project_id": project_id
                     }
                 }
             }))
-            .send()
             .await?;
 
-        let response_body = response.json::<serde_json::Value>().await?;
-        
-        // 刷新索引以确保删除操作立即生效
-        let _refresh_response = self
-            .client
-            .indices()
-            .refresh(IndicesRefreshParts::Index(&[INDEX]))
-            .send()
-            .await?;
-            
-        if let Some(deleted_count) = response_body["deleted"].as_u64() {
+        if let Some(deleted_count) = response["deleted"].as_u64() {
             Ok(deleted_count)
+        } else {
+            Err(anyhow!("未能获取删除的文档数量"))
+        }
+    }
+
+    async fn delete_by_meta(&self, meta: Meta) -> Result<()> {
+        if meta.any_empty() {
+            return Err(anyhow!("Meta is empty"));
+        }
+
+        let response = self
+            .delete(json!({
+                "query": {
+                    "term": {
+                        "metadata.project_id": meta.project_id,
+                        "metadata.path": meta.path,
+                        "metadata.method": meta.method,
+                    }
+                }
+            }))
+            .await?;
+
+        if let Some(_) = response["deleted"].as_u64() {
+            Ok(())
         } else {
             Err(anyhow!("未能获取删除的文档数量"))
         }

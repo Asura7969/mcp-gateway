@@ -24,8 +24,13 @@ impl InterfaceRetrievalState {
         embedding_config: EmbeddingConfig,
         embedding_service: Arc<EmbeddingService>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let service =
-            Arc::new(InterfaceRetrievalService::new(&embedding_config, embedding_service).await?);
+        let service = Arc::new(
+            InterfaceRetrievalService::new(
+                &embedding_config,
+                embedding_service,
+            )
+            .await?,
+        );
         Ok(Self { retrieval: service })
     }
 }
@@ -50,7 +55,7 @@ pub fn create_interface_relation_routes() -> Router<InterfaceRetrievalState> {
 pub async fn delete_project_data(
     State(state): State<InterfaceRetrievalState>,
     Path(project_id): Path<String>,
-) -> Result<Json<String>, (StatusCode, Json<InterfaceRelationError>)> {
+) -> Result<Json<bool>, (StatusCode, Json<InterfaceRelationError>)> {
     tracing::info!("Deleting data for project: {}", project_id);
 
     if project_id.trim().is_empty() {
@@ -66,8 +71,8 @@ pub async fn delete_project_data(
 
     match state.retrieval.delete_project_data(&project_id).await {
         Ok(result) => {
-            tracing::info!("Successfully deleted project data: {}", result);
-            Ok(Json(result))
+            tracing::info!("Successfully deleted project data(vector): {}", result);
+            Ok(Json(true))
         }
         Err(e) => {
             tracing::error!("Failed to delete project data: {}", e);
@@ -145,17 +150,19 @@ pub async fn search_interfaces(
             }),
         ));
     }
-    
+
     let start_time = Instant::now();
     let search_type = request.search_type.clone();
     match state.retrieval.search_interfaces(request).await {
         Ok(chunks) => {
             let mut interfaces_with_score = Vec::new();
             for chunk in &chunks {
-                let project_id = chunk.meta.get("project_id")
+                let project_id = chunk
+                    .meta
+                    .get("project_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                
+
                 // 直接使用chunk中的api_content字段
                 if let Some(api_interface) = &chunk.api_content {
                     // 创建InterfaceWithScore
@@ -163,18 +170,21 @@ pub async fn search_interfaces(
                         project_id: Some(project_id.to_string()),
                         interface: api_interface.clone(),
                         score: chunk.score,
-                        match_reason: format!("向量搜索匹配: {} {}", api_interface.method, api_interface.path),
+                        match_reason: format!(
+                            "向量搜索匹配: {} {}",
+                            api_interface.method, api_interface.path
+                        ),
                     };
-                    
+
                     interfaces_with_score.push(interface_with_score);
                 } else {
                     tracing::debug!("Chunk {} has no api_content, skipping", chunk.id);
                 }
             }
-            
+
             let query_time_ms = start_time.elapsed().as_millis() as u64;
             let total_count = interfaces_with_score.len() as u32;
-            
+
             // 构建响应
             let response = InterfaceSearchResponse {
                 interfaces: interfaces_with_score,
@@ -182,13 +192,13 @@ pub async fn search_interfaces(
                 total_count,
                 search_mode: format!("{:?}", search_type),
             };
-            
+
             tracing::info!(
                 "Interface search completed: {} results found in {}ms",
                 response.total_count,
                 response.query_time_ms
             );
-            
+
             Ok(Json(response))
         }
         Err(e) => {

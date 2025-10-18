@@ -2,7 +2,7 @@
 mod tests {
     use crate::config::Settings;
     use crate::models::interface_retrieval::*;
-    use crate::services::{EmbeddingService, ElasticSearch, Filter, Search};
+    use crate::services::{ElasticSearch, EmbeddingService, Filter, Search};
     use std::sync::Arc;
     use tokio::time::{sleep, Duration};
     use uuid::Uuid;
@@ -86,7 +86,10 @@ mod tests {
         let embedding_config = settings.embedding;
 
         println!("{:?}", embedding_config.elasticsearch);
-        assert!(embedding_config.elasticsearch.is_some(), "需要配置 embedding.elasticsearch");
+        assert!(
+            embedding_config.elasticsearch.is_some(),
+            "需要配置 embedding.elasticsearch"
+        );
         assert!(
             embedding_config.aliyun.is_some(),
             "需要配置 embedding.aliyun 以进行向量嵌入"
@@ -103,10 +106,11 @@ mod tests {
                 // 测试项目ID
                 let test_project_id = Uuid::new_v4();
 
-
                 // 0. 清理测试项目的旧数据（如果存在）
                 println!("🧹 清理旧测试数据...");
-                let _ = service.delete_project_data(test_project_id.to_string().as_str()).await;
+                let _ = service
+                    .delete_project_data(test_project_id.to_string().as_str())
+                    .await;
                 sleep(Duration::from_millis(500)).await; // 等待删除操作完成
 
                 // 1. 测试存储数据
@@ -127,11 +131,18 @@ mod tests {
 
                 // 1.5. 调试：查看存储的数据
                 println!("🔍 调试：查看存储的数据...");
-                match service.get_project_interfaces(test_project_id.to_string().as_str()).await {
+                match service
+                    .get_project_interfaces(test_project_id.to_string().as_str())
+                    .await
+                {
                     Ok(chunks) => {
                         println!("📊 存储的数据数量: {}", chunks.len());
                         for (i, chunk) in chunks.iter().enumerate() {
-                            println!("数据 {}: {}", i + 1, &chunk.text[..std::cmp::min(100, chunk.text.len())]);
+                            println!(
+                                "数据 {}: {}",
+                                i + 1,
+                                &chunk.text[..std::cmp::min(100, chunk.text.len())]
+                            );
                         }
                     }
                     Err(e) => {
@@ -143,7 +154,7 @@ mod tests {
                 println!("🔍 测试向量检索数据...");
                 let search_query = "用户id";
                 println!("🔍 向量搜索查询: '{}'", search_query);
-                
+
                 // 测试嵌入服务
                 match embedding_service.embed_text(search_query).await {
                     Ok(embedding) => {
@@ -153,18 +164,21 @@ mod tests {
                         println!("❌ 嵌入服务失败: {:?}", e);
                     }
                 }
-                
+
                 let project_filter = Filter {
                     project_id: Some(test_project_id.to_string()),
                     methods: None,
                     prefix_path: None,
                 };
-                
+
                 // 先测试嵌入服务是否正常工作
                 let _test_embedding = embedding_service.embed_text("用户id").await.unwrap();
-                
+
                 // 尝试不同的搜索词汇和阈值
-                match service.vector_search(search_query, 5, 0.0, Some(&project_filter)).await {
+                match service
+                    .vector_search(search_query, 5, 0.0, Some(&project_filter))
+                    .await
+                {
                     Ok(chunks) => {
                         println!("✅ 向量检索成功，找到 {} 个结果", chunks.len());
 
@@ -175,28 +189,43 @@ mod tests {
                             // 验证项目ID匹配
                             if let Some(project_id) = chunk.meta.get("project_id") {
                                 let stored_project_id = project_id.as_str().unwrap_or("");
-                                assert_eq!(stored_project_id, test_project_id.to_string(), "项目ID应该匹配");
+                                assert_eq!(
+                                    stored_project_id,
+                                    test_project_id.to_string(),
+                                    "项目ID应该匹配"
+                                );
                             }
                         } else {
                             println!("⚠️ 向量搜索无结果，尝试更宽松的搜索...");
-                            
+
                             // 尝试更低的阈值
-                            match service.vector_search("用户", 5, 0.01, Some(&project_filter)).await {
+                            match service
+                                .vector_search("用户", 5, 0.01, Some(&project_filter))
+                                .await
+                            {
                                 Ok(broader_chunks) => {
-                                    println!("📊 更宽松搜索('用户')结果数量: {}", broader_chunks.len());
+                                    println!(
+                                        "📊 更宽松搜索('用户')结果数量: {}",
+                                        broader_chunks.len()
+                                    );
                                 }
-                                Err(e) => println!("❌ 更宽松搜索失败: {:?}", e)
+                                Err(e) => println!("❌ 更宽松搜索失败: {:?}", e),
                             }
-                            
+
                             // 尝试无过滤器的搜索
                             match service.vector_search("用户id", 5, 0.01, None).await {
                                 Ok(no_filter_chunks) => {
                                     println!("📊 无过滤器搜索结果数量: {}", no_filter_chunks.len());
                                     for (i, result) in no_filter_chunks.iter().enumerate() {
-                                        println!("结果 {}: {} (分数: {})", i + 1, &result.text[..std::cmp::min(50, result.text.len())], result.score);
+                                        println!(
+                                            "结果 {}: {} (分数: {})",
+                                            i + 1,
+                                            &result.text[..std::cmp::min(50, result.text.len())],
+                                            result.score
+                                        );
                                     }
                                 }
-                                Err(e) => println!("❌ 无过滤器搜索失败: {:?}", e)
+                                Err(e) => println!("❌ 无过滤器搜索失败: {:?}", e),
                             }
                         }
                     }
@@ -208,7 +237,10 @@ mod tests {
 
                 // 3. 测试关键词检索
                 println!("🔍 测试关键词检索数据...");
-                match service.keyword_search("唯一id", 10, Some(&project_filter)).await {
+                match service
+                    .keyword_search("唯一id", 10, Some(&project_filter))
+                    .await
+                {
                     Ok(chunks) => {
                         println!("✅ 关键词检索成功，找到 {} 个结果", chunks.len());
 
@@ -243,7 +275,11 @@ mod tests {
                         for chunk in &chunks {
                             let meta = &chunk.meta;
                             let meta_str = serde_json::to_string(meta).unwrap();
-                            assert_eq!(meta.get("method").unwrap().as_str().unwrap(), "GET", "方法应该是GET");
+                            assert_eq!(
+                                meta.get("method").unwrap().as_str().unwrap(),
+                                "GET",
+                                "方法应该是GET"
+                            );
                             assert!(meta_str.contains("/api/users"), "路径应该包含/api/users");
                             assert_eq!(
                                 meta.get("project_id").unwrap().as_str().unwrap(),
@@ -272,15 +308,16 @@ mod tests {
                 match service.hybrid_search(hybrid_request).await {
                     Ok(chunks) => {
                         println!("✅ 混合检索成功，找到 {} 个结果", chunks.len());
-                        
+
                         if !chunks.is_empty() {
                             for (i, chunk) in chunks.iter().enumerate() {
-                                println!("混合检索结果 {}: {} (分数: {})", 
-                                    i + 1, 
-                                    &chunk.text[..std::cmp::min(50, chunk.text.len())], 
+                                println!(
+                                    "混合检索结果 {}: {} (分数: {})",
+                                    i + 1,
+                                    &chunk.text[..std::cmp::min(50, chunk.text.len())],
                                     chunk.score
                                 );
-                                
+
                                 // 验证结果包含项目ID
                                 if let Some(stored_project_id) = chunk.meta["project_id"].as_str() {
                                     assert_eq!(
@@ -303,13 +340,19 @@ mod tests {
 
                 // 6. 测试删除数据
                 println!("🗑️ 测试删除项目数据...");
-                match service.delete_project_data(test_project_id.to_string().as_str()).await {
+                match service
+                    .delete_project_data(test_project_id.to_string().as_str())
+                    .await
+                {
                     Ok(deleted) => {
                         println!("✅ 数据删除成功: {} 条", deleted);
 
                         // 等待刷新后验证数据已被删除 - 再次检索应该返回空结果
                         sleep(Duration::from_millis(800)).await;
-                        match service.keyword_search("唯一id", 5, Some(&project_filter)).await {
+                        match service
+                            .keyword_search("唯一id", 5, Some(&project_filter))
+                            .await
+                        {
                             Ok(results) => {
                                 assert!(results.is_empty(), "删除后检索应该返回空结果");
                                 println!("✅ 验证删除成功：检索返回空结果");

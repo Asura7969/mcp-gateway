@@ -55,10 +55,7 @@ mod integration_tests {
 
         // 验证搜索功能正常工作（可能有历史数据）
         // 这个测试主要验证搜索功能不会崩溃，而不是验证具体的结果数量
-        assert!(
-            chunks.len() >= 0,
-            "Search should return valid results"
-        );
+        assert!(chunks.len() >= 0, "Search should return valid results");
 
         info!("搜索功能测试完成：");
         info!("  - Total count: {}", chunks.len());

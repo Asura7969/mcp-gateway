@@ -1,7 +1,7 @@
 use crate::config::EmbeddingConfig;
 use crate::models::interface_retrieval::*;
 use crate::models::swagger::SwaggerSpec;
-use crate::services::{merge_content, Chunk, EmbeddingService, Filter, Search};
+use crate::services::{merge_content, Chunk, EmbeddingService, Filter, Meta, Search};
 use crate::utils::generate_api_details;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -184,6 +184,13 @@ impl PgvectorRsSearch {
 
 #[async_trait]
 impl Search for PgvectorRsSearch {
+    async fn store_interface(&self, interface: ApiInterface, project_id: String) -> Result<()> {
+        let _ = self
+            .store_interfaces(&[interface], project_id.as_str())
+            .await?;
+        Ok(())
+    }
+
     async fn parse_and_store_swagger(&self, request: SwaggerParseRequest) -> Result<()> {
         info!("Parsing Swagger for project: {}", request.project_id);
 
@@ -431,5 +438,23 @@ impl Search for PgvectorRsSearch {
             .execute(&self.pool)
             .await?;
         Ok(pqr.rows_affected())
+    }
+
+    async fn delete_by_meta(&self, meta: Meta) -> Result<()> {
+        if meta.any_empty() {
+            return Err(anyhow!("Meta is empty"));
+        }
+        let _pqr = sqlx::query(
+            r#"
+            DELETE FROM interfaces_v2
+            WHERE meta->>'project_id' = $1 and meta->>'path' = $2 and meta->>'method' = $3
+            "#,
+        )
+        .bind(meta.project_id)
+        .bind(meta.path)
+        .bind(meta.method)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

@@ -7,15 +7,19 @@ use anyhow::Result;
 use serde_json::Value;
 use sqlx::Row;
 use std::convert::TryInto;
+use tokio::sync::mpsc;
 use uuid::Uuid;
+use crate::services::EndpointEvent;
 
+#[derive(Clone)]
 pub struct EndpointService {
     pool: DbPool,
+    event_sender: mpsc::Sender<EndpointEvent>
 }
 
 impl EndpointService {
-    pub fn new(pool: DbPool) -> Self {
-        Self { pool }
+    pub fn new(pool: DbPool, event_sender: mpsc::Sender<EndpointEvent>,) -> Self {
+        Self { pool, event_sender }
     }
 
     pub fn get_pool(&self) -> &DbPool {
@@ -65,6 +69,7 @@ impl EndpointService {
                 .await?;
 
             let updated_endpoint = self.get_endpoint_by_id(endpoint.id).await?;
+            self.event_sender.send(EndpointEvent::UPDATE(endpoint.name)).await?;
             Ok(updated_endpoint.into())
         } else {
             // Create new endpoint
@@ -91,6 +96,9 @@ impl EndpointService {
             self.update_api_paths_table(id, &swagger_spec).await?;
 
             let endpoint = self.get_endpoint_by_id(id).await?;
+
+            self.event_sender.send(EndpointEvent::Created(endpoint.name.clone())).await?;
+
             Ok(endpoint.into())
         }
     }
@@ -296,7 +304,18 @@ impl EndpointService {
         Ok(endpoint)
     }
 
-    pub async fn get_endpoint_by_name(&self, names: Vec<String>) -> Result<Vec<Endpoint>> {
+    pub async fn get_endpoint_by_name(&self, name: String) -> Result<Endpoint> {
+        let endpoint = sqlx::query_as::<_, Endpoint>(
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name = ? limit 1"
+        )
+            .bind(name)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(endpoint)
+    }
+
+    pub async fn get_endpoint_by_names(&self, names: Vec<String>) -> Result<Vec<Endpoint>> {
         if names.is_empty() {
             return Ok(vec![]);
         }
@@ -304,19 +323,19 @@ impl EndpointService {
         // 构建IN子句的占位符
         let placeholders: Vec<String> = (1..=names.len()).map(|i| format!("${}", i)).collect();
         let in_clause = placeholders.join(", ");
-        
+
         let query = format!(
             "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name IN ({}) AND status != 'deleted'",
             in_clause
         );
 
         let mut query_builder = sqlx::query_as::<_, Endpoint>(&query);
-        
+
         // 绑定每个名称参数
         for name in names {
             query_builder = query_builder.bind(name);
         }
-        
+
         let endpoints = query_builder.fetch_all(&self.pool).await?;
         Ok(endpoints)
     }
@@ -430,17 +449,23 @@ impl EndpointService {
         query_builder.execute(&self.pool).await?;
 
         let endpoint = self.get_endpoint_by_id(id).await?;
+        self.event_sender.send(EndpointEvent::UPDATE(endpoint.name.clone())).await?;
         Ok(endpoint.into())
     }
 
     pub async fn delete_endpoint(&self, id: Uuid) -> Result<()> {
-        sqlx::query("UPDATE endpoints SET status = 'deleted', updated_at = ? WHERE id = ?")
-            .bind(get_china_time())
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
+        match self.get_endpoint_by_id(id).await {
+            Ok(endpoint) => {
+                sqlx::query("UPDATE endpoints SET status = 'deleted', updated_at = ? WHERE id = ?")
+                    .bind(get_china_time())
+                    .bind(id.to_string())
+                    .execute(&self.pool)
+                    .await?;
+                self.event_sender.send(EndpointEvent::DELETE(endpoint.name)).await?;
+                Ok(())
+            }
+            Err(_) => Ok(())
+        }
     }
 
     pub async fn get_endpoint_metrics(&self, id: Uuid) -> Result<EndpointMetrics> {
@@ -574,15 +599,6 @@ impl EndpointService {
     }
 }
 
-// Add Clone implementation for EndpointService
-impl Clone for EndpointService {
-    fn clone(&self) -> Self {
-        Self {
-            pool: self.pool.clone(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -601,8 +617,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // 需要测试数据库
     async fn test_create_endpoint() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = create_test_pool().await;
-        let service = EndpointService::new(pool);
+        let service = EndpointService::new(pool, tx);
 
         let request = CreateEndpointRequest {
             name: "Test Endpoint".to_string(),
@@ -621,8 +638,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // 需要测试数据库
     async fn test_create_endpoint_with_same_name_merges_data() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = create_test_pool().await;
-        let service = EndpointService::new(pool);
+        let service = EndpointService::new(pool, tx);
 
         // 创建第一个端点
         let request1 = CreateEndpointRequest {
@@ -673,8 +691,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // 需要测试数据库
     async fn test_merge_swagger_specs_no_duplicates() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = create_test_pool().await;
-        let service = EndpointService::new(pool);
+        let service = EndpointService::new(pool, tx);
 
         let existing =
             serde_json::from_str(r#"{"paths": {"/test": {"get": {"summary": "Existing"}}}}"#)
@@ -694,8 +713,9 @@ mod tests {
     #[tokio::test]
     #[ignore] // 需要测试数据库
     async fn test_merge_swagger_specs_with_duplicates() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = create_test_pool().await;
-        let service = EndpointService::new(pool);
+        let service = EndpointService::new(pool, tx);
 
         let existing =
             serde_json::from_str(r#"{"paths": {"/test": {"get": {"summary": "Existing"}}}}"#)

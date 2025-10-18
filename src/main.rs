@@ -26,13 +26,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::middleware::stream_requests_interceptor;
 use crate::models::DB_POOL;
 use crate::routes::*;
-use crate::services::{EmbeddingService, McpService, SessionService};
+use crate::services::{EmbeddingService, EndpointListener, McpService, SessionService};
 use crate::utils::MonitoredSessionManager;
 use config::Settings;
 use handlers::*;
 use middleware::{cors_layer, logging};
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use tokio::sync::mpsc;
 use services::{EndpointService, SwaggerService};
 use state::AppState;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -74,11 +75,12 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database connection pool created");
     let db_pool = Arc::new(pool);
 
+
+    let (tx, rx) = mpsc::channel(100);
+    
     // Create services
-    let endpoint_service = Arc::new(EndpointService::new((*db_pool).clone()));
-    let swagger_service = Arc::new(SwaggerService::new(EndpointService::new(
-        (*db_pool).clone(),
-    )));
+    let endpoint_service = Arc::new(EndpointService::new((*db_pool).clone(), tx.clone()));
+    let swagger_service = Arc::new(SwaggerService::new((*endpoint_service).clone()));
     let mcp_service = Arc::new(McpService::new((*db_pool).clone()));
 
     // Initialize EmbeddingService
@@ -87,11 +89,17 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("EmbeddingService initialized");
 
     // Create interface retrieval state
-    let interface_retrieval_state =
-        InterfaceRetrievalState::new(embedding_config, embedding_service.clone())
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
+    let interface_retrieval_state = InterfaceRetrievalState::new(
+        embedding_config,
+        embedding_service.clone(),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;
 
+    let retrieval_service = interface_retrieval_state.retrieval.clone();
+    let endpoint_listener = EndpointListener::new(retrieval_service, endpoint_service.clone(), tx);
+    EndpointListener::run(endpoint_listener, rx);
+    
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
 
     let config = SseServerConfig {

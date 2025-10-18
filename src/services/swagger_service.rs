@@ -156,6 +156,7 @@ impl SwaggerService {
 
 #[cfg(test)]
 mod tests {
+    use tokio::sync::mpsc;
     use super::*;
     use crate::utils::generate_api_details;
 
@@ -564,8 +565,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_swagger_spec() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
-        let endpoint_service = EndpointService::new(pool);
+        let endpoint_service = EndpointService::new(pool, tx);
         let service = SwaggerService::new(endpoint_service);
 
         let spec = create_test_swagger_spec();
@@ -705,8 +707,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_for_duplicate_paths_no_duplicates() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
-        let endpoint_service = EndpointService::new(pool);
+        let endpoint_service = EndpointService::new(pool, tx);
         let service = SwaggerService::new(endpoint_service);
 
         let existing =
@@ -721,8 +724,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_for_duplicate_paths_with_duplicates() {
+        let (tx, _rx) = mpsc::channel(100);
         let pool = sqlx::MySqlPool::connect_lazy("mysql://test").unwrap();
-        let endpoint_service = EndpointService::new(pool);
+        let endpoint_service = EndpointService::new(pool, tx);
         let service = SwaggerService::new(endpoint_service);
 
         let existing =

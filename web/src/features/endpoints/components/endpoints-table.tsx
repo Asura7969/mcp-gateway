@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input'
 import { DataTablePagination } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Eye, Edit, Trash2, Settings, Copy } from 'lucide-react'
+import { Eye, Edit, Trash2, Settings, Copy, RefreshCw } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -179,13 +179,17 @@ const ActionsCell = ({
   onView,
   onEdit,
   onDelete,
-  onConfig
+  onConfig,
+  onSync,
+  isSyncing
 }: {
   row: Row<Endpoint>,
   onView: (row: Row<Endpoint>) => void,
   onEdit: (row: Row<Endpoint>) => void,
   onDelete: (row: Row<Endpoint>) => void,
-  onConfig: (row: Row<Endpoint>) => void
+  onConfig: (row: Row<Endpoint>) => void,
+  onSync: (row: Row<Endpoint>) => void,
+  isSyncing: boolean
 }) => {
   return (
     <div className='flex items-center gap-2'>
@@ -215,6 +219,16 @@ const ActionsCell = ({
       >
         <Settings className='h-4 w-4' />
         <span className='sr-only'>配置</span>
+      </Button>
+      <Button
+        variant='outline'
+        size='sm'
+        onClick={() => onSync(row)}
+        disabled={isSyncing}
+        className='h-8 w-8 p-0'
+      >
+        <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+        <span className='sr-only'>同步</span>
       </Button>
       <Button
         variant='outline'
@@ -252,6 +266,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null)
   const [endpointDetail, setEndpointDetail] = useState<any>(null)
   const [openApiDetails, setOpenApiDetails] = useState<Record<string, boolean>>({})
@@ -323,6 +338,8 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onConfig={handleConfig}
+          onSync={handleSync}
+          isSyncing={isSyncing}
         />
       ),
     },
@@ -360,16 +377,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
     onColumnFiltersChange: setColumnFilters,
   })
 
-  // 获取状态配置
-  const getStatusConfig = (status: string) => {
-    const statusMap: Record<string, { label: string; variant: any }> = {
-      Running: { label: '运行中', variant: 'default' },
-      Stopped: { label: '已停用', variant: 'secondary' },
-      Deleted: { label: '已删除', variant: 'destructive' },
-    }
-    
-    return statusMap[status] || { label: status, variant: 'default' }
-  }
+
 
   // 获取方法徽章样式
   const getMethodBadgeClass = (method: string) => {
@@ -446,6 +454,25 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
     setSelectedEndpoint(row.original)
     setIsConfigOpen(true)
   }
+
+  // 处理同步操作
+   const handleSync = async (row: Row<Endpoint>) => {
+     setIsSyncing(true)
+     try {
+       await EndpointsApiService.syncEndpoint(row.original.name)
+       toast.success('同步成功')
+       onDataReload?.()
+     } catch (error) {
+       console.error('Failed to sync endpoint:', error)
+       toast.error('同步失败', {
+         description: (error as Error).message || '未知错误',
+         duration: 10000,
+         closeButton: true,
+       })
+     } finally {
+       setIsSyncing(false)
+     }
+   }
 
   // 处理更新端点操作
   const handleUpdateEndpoint = async () => {

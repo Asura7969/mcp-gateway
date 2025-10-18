@@ -10,16 +10,6 @@ use axum::{
 };
 use uuid::Uuid;
 
-// #[utoipa::path(
-//     post,
-//     path = "/api/endpoint",
-//     request_body = CreateEndpointRequest,
-//     responses(
-//         (status = 201, description = "Endpoint created successfully", body = EndpointResponse),
-//         (status = 400, description = "Bad request"),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn create_endpoint(
     State(app_state): State<AppState>,
     Json(request): Json<CreateEndpointRequest>,
@@ -33,14 +23,6 @@ pub async fn create_endpoint(
     }
 }
 
-// #[utoipa::path(
-//     get,
-//     path = "/api/endpoint",
-//     responses(
-//         (status = 200, description = "List of endpoints", body = Vec<EndpointResponse>),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn list_endpoints(
     State(app_state): State<AppState>,
 ) -> Result<Json<Vec<EndpointResponse>>, (StatusCode, String)> {
@@ -87,18 +69,6 @@ pub async fn list_endpoints_paginated(
     }
 }
 
-// #[utoipa::path(
-//     get,
-//     path = "/api/endpoint/{id}",
-//     params(
-//         ("id" = Uuid, Path, description = "Endpoint ID")
-//     ),
-//     responses(
-//         (status = 200, description = "Endpoint details", body = EndpointDetailResponse),
-//         (status = 404, description = "Endpoint not found"),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn get_endpoint(
     State(app_state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -116,19 +86,6 @@ pub async fn get_endpoint(
     }
 }
 
-// #[utoipa::path(
-//     put,
-//     path = "/api/endpoint/{id}",
-//     params(
-//         ("id" = Uuid, Path, description = "Endpoint ID")
-//     ),
-//     request_body = UpdateEndpointRequest,
-//     responses(
-//         (status = 200, description = "Endpoint updated successfully", body = EndpointResponse),
-//         (status = 404, description = "Endpoint not found"),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn update_endpoint(
     State(app_state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -151,18 +108,6 @@ pub async fn update_endpoint(
     }
 }
 
-// #[utoipa::path(
-//     delete,
-//     path = "/api/endpoint/{id}",
-//     params(
-//         ("id" = Uuid, Path, description = "Endpoint ID")
-//     ),
-//     responses(
-//         (status = 204, description = "Endpoint deleted successfully"),
-//         (status = 404, description = "Endpoint not found"),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn delete_endpoint(
     State(app_state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -180,18 +125,6 @@ pub async fn delete_endpoint(
     }
 }
 
-// #[utoipa::path(
-//     get,
-//     path = "/api/endpoint/{id}/metrics",
-//     params(
-//         ("id" = Uuid, Path, description = "Endpoint ID")
-//     ),
-//     responses(
-//         (status = 200, description = "Endpoint metrics", body = EndpointMetrics),
-//         (status = 404, description = "Endpoint not found"),
-//         (status = 500, description = "Internal server error")
-//     )
-// )]
 pub async fn get_endpoint_metrics(
     State(app_state): State<AppState>,
     Path(id): Path<Uuid>,
