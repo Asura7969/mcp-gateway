@@ -588,6 +588,11 @@ impl EndpointService {
         Ok(())
     }
 
+    pub async fn sync_endpoint_vector(&self, name: String) -> Result<()> {
+        let r = self.event_sender.send(EndpointEvent::UPDATE(name)).await?;
+        Ok(r)
+    }
+
     pub async fn update_connection_count(&self, id: Uuid, delta: i32) -> Result<()> {
         sqlx::query("UPDATE endpoints SET connection_count = connection_count + ? WHERE id = ?")
             .bind(delta)

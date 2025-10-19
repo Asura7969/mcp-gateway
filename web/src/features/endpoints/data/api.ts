@@ -47,8 +47,8 @@ export class EndpointsApiService {
     await api.delete(`/api/endpoint/${id}`)
   }
 
-  static async syncEndpoint(projectId: string): Promise<string> {
-    const response = await api.delete(`/api/interface-retrieval/projects/${projectId}`)
+  static async syncEndpoint(name: string): Promise<string> {
+    const response = await api.post(`/api/endpoint/${name}/sync_vector`)
     return response.data
   }
 }

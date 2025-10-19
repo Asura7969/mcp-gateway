@@ -187,3 +187,15 @@ pub async fn stop_endpoint(
         }
     }
 }
+
+pub async fn sync_endpoint_vector(State(app_state): State<AppState>,
+                                     Path(name): Path<String>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    match app_state.endpoint_service.sync_endpoint_vector(name).await {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(e) => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Endpoint listener maybe stopped".to_string(),
+        ))
+    }
+}
