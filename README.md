@@ -43,28 +43,6 @@ cp config/default.toml.example config/default.toml
 ./scripts/deployment/start.sh
 ```
 
-### 使用示例
-
-```bash
-# 1. 转换 Swagger 为 MCP 工具
-curl -X POST http://localhost:3000/api/swagger \
-  -H "Content-Type: application/json" \
-  -d '{
-    "endpoint_name": "user-api",
-    "description": "用户管理API",
-    "swagger_content": "{...}"
-  }'
-
-# 2. 向量检索接口
-curl -X POST http://localhost:3000/api/interface-retrieval/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "获取用户信息",
-    "search_type": "Hybrid",
-    "max_results": 10
-  }'
-```
-
 ## 🏗️ 技术架构
 
 ### 后端技术栈

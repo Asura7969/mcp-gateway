@@ -1,18 +1,25 @@
 import axios from 'axios'
-import { type SearchParams, type SearchResult, type SearchResponse } from './schema'
+import { type SearchParams, type SearchResult, type InterfaceSearchResponse, type ProjectInfo } from './schema'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
   timeout: 10000,
 })
 
+export interface SearchApiResponse {
+  results: SearchResult[]
+  queryTime?: number
+  totalCount?: number
+  searchMode?: string
+}
+
 export class SearchApiService {
-  static async search(params: SearchParams): Promise<SearchResult[]> {
+  static async search(params: SearchParams): Promise<SearchApiResponse> {
     const response = await api.post('/api/interface-retrieval/search', params)
-    const data: SearchResponse = response.data
+    const data: InterfaceSearchResponse = response.data
     
     // 转换后端响应数据为前端期望的格式
-    return data.interfaces.map(item => ({
+    const results = data.interfaces.map(item => ({
       score: item.score,
       summary: item.interface.summary || '无标题',
       method: item.interface.method,
@@ -20,14 +27,34 @@ export class SearchApiService {
       description: item.interface.description || '无描述',
       service_description: item.interface.service_description || '无服务描述',
       match_reason: item.match_reason,
-      search_type: item.search_type,
+      search_type: data.search_mode, // 从响应的search_mode获取
       // 保留原始数据以备后用
       project_id: item.project_id,
-      similarity_score: item.similarity_score,
       operation_id: item.interface.operation_id,
       tags: item.interface.tags,
       domain: item.interface.domain,
-      deprecated: item.interface.deprecated
+      deprecated: item.interface.deprecated,
+      // 新增字段
+      path_params: item.interface.path_params,
+      query_params: item.interface.query_params,
+      header_params: item.interface.header_params,
+      body_params: item.interface.body_params,
+      request_schema: item.interface.request_schema,
+      response_schema: item.interface.response_schema,
+      embedding_model: item.interface.embedding_model,
+      embedding_updated_at: item.interface.embedding_updated_at
     }))
+
+    return {
+      results,
+      queryTime: data.query_time_ms,
+      totalCount: data.total_count,
+      searchMode: data.search_mode
+    }
+  }
+
+  static async getProjects(): Promise<ProjectInfo[]> {
+    const response = await api.get('/api/interface-retrieval/projects')
+    return response.data
   }
 }

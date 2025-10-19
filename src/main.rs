@@ -92,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
     let interface_retrieval_state = InterfaceRetrievalState::new(
         embedding_config,
         embedding_service.clone(),
+        (*db_pool).clone(),
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create interface relation state: {}", e))?;

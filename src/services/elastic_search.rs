@@ -294,7 +294,9 @@ impl ElasticSearch {
                 filter.push(json!({"term": {"metadata.project_id": pid}}));
             }
             if let Some(methods) = &f.methods {
-                filter.push(json!({"terms": {"metadata.method": methods}}));
+                if !methods.is_empty() {
+                    filter.push(json!({"terms": {"metadata.method": methods}}));
+                }
             }
             if let Some(prefix_path) = &f.prefix_path {
                 filter.push(json!({"prefix": {"metadata.path": prefix_path}}));
@@ -409,6 +411,7 @@ impl Search for ElasticSearch {
         similarity_threshold: f32,
         filters: Option<&Filter>,
     ) -> Result<Vec<Chunk>> {
+        info!("filter: {:?}", filters);
         // 获取查询向量
         let query_embedding = self
             .embedding_service
@@ -498,9 +501,15 @@ impl Search for ElasticSearch {
     }
 
     async fn hybrid_search(&self, request: InterfaceSearchRequest) -> Result<Vec<Chunk>> {
-        let (vector_weight, keyword_weight) = match &request.vector_weight {
-            None => (0.5f32, 0.5f32), // 默认权重相等
-            Some(vector_weight) => (*vector_weight, 1.0 - vector_weight),
+        let (vector_weight, keyword_weight) = match request.search_type {
+            SearchType::Vector => (1.0f32, 0.0f32),
+            SearchType::Keyword => (0.0f32, 1.0f32),
+            SearchType::Hybrid => {
+                match &request.vector_weight {
+                    None => (0.5f32, 0.5f32), // 默认权重相等
+                    Some(vector_weight) => (*vector_weight, 1.0 - vector_weight),
+                }
+            }
         };
 
         let max_results = request.max_results;

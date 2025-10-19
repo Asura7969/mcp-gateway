@@ -13,16 +13,26 @@ import { SearchApiService } from './data/api'
 export function SearchDebug() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [queryTime, setQueryTime] = useState<number | undefined>()
+  const [totalCount, setTotalCount] = useState<number | undefined>()
+  const [searchMode, setSearchMode] = useState<string | undefined>()
 
   const handleSearch = async (params: SearchParams) => {
     setLoading(true)
+    setError(null)
     try {
-      console.log('Search params:', params)
-      const results = await SearchApiService.search(params)
-      setSearchResults(results)
-    } catch (error) {
-      console.error('Search failed:', error)
+      const response = await SearchApiService.search(params)
+      setSearchResults(response.results)
+      setQueryTime(response.queryTime)
+      setTotalCount(response.totalCount)
+      setSearchMode(response.searchMode)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '搜索失败')
       setSearchResults([])
+      setQueryTime(undefined)
+      setTotalCount(undefined)
+      setSearchMode(undefined)
     } finally {
       setLoading(false)
     }
@@ -54,7 +64,13 @@ export function SearchDebug() {
           </div>
           
           <div className="flex-1">
-            <SearchResults results={searchResults} loading={loading} />
+            <SearchResults 
+              results={searchResults} 
+              loading={loading}
+              queryTime={queryTime}
+              totalCount={totalCount}
+              searchMode={searchMode}
+            />
           </div>
         </div>
       </Main>

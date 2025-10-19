@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import {
   Command,
   CommandEmpty,
@@ -22,22 +24,19 @@ import {
 } from '@/components/ui/popover'
 import { ChevronDown, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { type SearchParams, defaultSearchParams } from '../data/schema'
+import { type SearchParams, type SearchType, type ProjectInfo, defaultSearchParams } from '../data/schema'
+import { SearchApiService } from '../data/api'
 
-// 项目列表数据
-const projects = [
-  { label: 'agent-bot', value: 'agent-bot' },
-  { label: 'web-crawler', value: 'web-crawler' },
-  { label: 'data-processor', value: 'data-processor' },
-  { label: 'api-gateway', value: 'api-gateway' },
-  { label: 'ml-pipeline', value: 'ml-pipeline' },
+// 搜索类型选项
+const searchTypeOptions = [
+  { label: '混合搜索', value: 'Hybrid' as SearchType },
+  { label: '向量搜索', value: 'Vector' as SearchType },
+  { label: '关键词搜索', value: 'Keyword' as SearchType },
 ] as const
 
 const availableMethods = [
   'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'
 ] as const
-
-
 
 interface SearchFormProps {
   onSearch: (params: SearchParams) => void
@@ -47,10 +46,16 @@ interface SearchFormProps {
 export function SearchForm({ onSearch, loading }: SearchFormProps) {
   const [params, setParams] = useState<SearchParams>(defaultSearchParams)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [tagInput, setTagInput] = useState('')
+  const [searchTypeOpen, setSearchTypeOpen] = useState(false)
+  const [projectOpen, setProjectOpen] = useState(false)
+
   const [popoverWidth, setPopoverWidth] = useState<number>(200)
+  const [searchTypePopoverWidth, setSearchTypePopoverWidth] = useState<number>(200)
   const [projectPopoverWidth, setProjectPopoverWidth] = useState<number>(200)
+  const [projects, setProjects] = useState<ProjectInfo[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const searchTypeButtonRef = useRef<HTMLButtonElement>(null)
   const projectButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -60,81 +65,58 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
   }, [filtersOpen])
 
   useEffect(() => {
+    if (searchTypeButtonRef.current) {
+      setSearchTypePopoverWidth(searchTypeButtonRef.current.offsetWidth)
+    }
+  }, [params.search_type])
+
+  useEffect(() => {
     if (projectButtonRef.current) {
       setProjectPopoverWidth(projectButtonRef.current.offsetWidth)
     }
-  }, [params.project_id])
+  }, [params.filters?.project_id])
 
-  const handleSliderChange = (value: number) => {
-    const vectorWeight = value
-    const keywordWeight = 1 - value
-    
-    let searchMode: 'vector' | 'keyword' | 'hybrid' = 'hybrid'
-    let enableVector = true
-    let enableKeyword = true
-    
-    if (value === 0) {
-      searchMode = 'keyword'
-      enableVector = false
-      enableKeyword = true
-    } else if (value === 1) {
-      searchMode = 'vector'
-      enableVector = true
-      enableKeyword = false
+  // 获取项目列表
+  useEffect(() => {
+    const fetchProjects = async () => {
+      setProjectsLoading(true)
+      try {
+        const projectList = await SearchApiService.getProjects()
+        setProjects(projectList)
+      } catch (error) {
+        console.error('Failed to fetch projects:', error)
+      } finally {
+        setProjectsLoading(false)
+      }
     }
     
-    setParams(prev => ({
-      ...prev,
-      vector_weight: vectorWeight,
-      keyword_weight: keywordWeight,
-      enable_vector_search: enableVector,
-      enable_keyword_search: enableKeyword,
-      search_mode: searchMode
-    }))
-  }
+    fetchProjects()
+  }, [])
 
   // 处理methods过滤条件
   const handleMethodToggle = (method: string) => {
     setParams(prev => ({
       ...prev,
-      methods: prev.methods.includes(method)
-        ? prev.methods.filter(m => m !== method)
-        : [...prev.methods, method]
+      filters: {
+        ...prev.filters,
+        methods: prev.filters?.methods?.includes(method)
+          ? prev.filters.methods.filter(m => m !== method)
+          : [...(prev.filters?.methods || []), method]
+      }
     }))
   }
 
 
-
-  // 移除tag
-  const handleRemoveTag = (tag: string) => {
-    setParams(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }))
-  }
-
-  // 添加新标签
-  const handleAddTag = () => {
-    const trimmedTag = tagInput.trim()
-    if (trimmedTag && !params.tags.includes(trimmedTag)) {
-      setParams(prev => ({
-        ...prev,
-        tags: [...prev.tags, trimmedTag]
-      }))
-      setTagInput('')
-    }
-  }
-
-  // 处理标签输入框的键盘事件
-  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleAddTag()
-    }
-  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 验证项目选择是否为必填
+    if (!params.filters?.project_id) {
+      alert('请选择一个项目')
+      return
+    }
+    
     onSearch(params)
   }
 
@@ -157,54 +139,134 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
             />
           </div>
 
-          {/* Project ID选择和Max Results输入 - 同一行 */}
+          {/* 项目选择 */}
+          <div className="space-y-2">
+            <Label htmlFor="project_id">项目选择</Label>
+            <Popover open={projectOpen} onOpenChange={setProjectOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  ref={projectButtonRef}
+                  variant="outline"
+                  role="combobox"
+                  className={cn(
+                    "w-full justify-between",
+                    !params.filters?.project_id && "text-muted-foreground"
+                  )}
+                  disabled={projectsLoading}
+                >
+                  {params.filters?.project_id
+                    ? projects.find((project) => project.id === params.filters?.project_id)?.name || params.filters?.project_id
+                    : projectsLoading ? "加载中..." : "选择项目（必填）"}
+                  <CaretSortIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent 
+                className="p-0" 
+                align="start"
+                style={{ width: projectPopoverWidth }}
+              >
+                <Command>
+                  <CommandInput placeholder="搜索项目..." />
+                  <CommandEmpty>未找到项目。</CommandEmpty>
+                  <CommandGroup>
+                    <CommandList>
+                      <CommandItem
+                        value="all-projects"
+                        onSelect={() => {
+                          setParams(prev => ({ 
+                            ...prev, 
+                            filters: { ...prev.filters, project_id: undefined }
+                          }))
+                          setProjectOpen(false)
+                        }}
+                      >
+                        <CheckIcon
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            !params.filters?.project_id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        所有项目
+                      </CommandItem>
+                      {projects.map((project) => (
+                        <CommandItem
+                          value={project.name}
+                          key={project.id}
+                          onSelect={() => {
+                            setParams(prev => ({ 
+                              ...prev, 
+                              filters: { ...prev.filters, project_id: project.id }
+                            }))
+                            setProjectOpen(false)
+                          }}
+                        >
+                          <CheckIcon
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              project.id === params.filters?.project_id
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          />
+                          {project.name}
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* 搜索类型选择和最大结果数 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="project_id">项目ID</Label>
-              <Popover>
+              <Label htmlFor="search_type">搜索类型</Label>
+              <Popover open={searchTypeOpen} onOpenChange={setSearchTypeOpen}>
                 <PopoverTrigger asChild>
                   <Button
-                    ref={projectButtonRef}
+                    ref={searchTypeButtonRef}
                     variant="outline"
                     role="combobox"
                     className={cn(
                       "w-full justify-between",
-                      !params.project_id && "text-muted-foreground"
+                      !params.search_type && "text-muted-foreground"
                     )}
                   >
-                    {params.project_id
-                      ? projects.find((project) => project.value === params.project_id)?.label
-                      : "选择项目"}
+                    {params.search_type
+                      ? searchTypeOptions.find((option) => option.value === params.search_type)?.label
+                      : "选择搜索类型"}
                     <CaretSortIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent 
                   className="p-0" 
                   align="start"
-                  style={{ width: projectPopoverWidth }}
+                  style={{ width: searchTypePopoverWidth }}
                 >
                   <Command>
-                    <CommandInput placeholder="搜索项目..." />
-                    <CommandEmpty>未找到项目。</CommandEmpty>
+                    <CommandInput placeholder="搜索类型..." />
+                    <CommandEmpty>未找到搜索类型。</CommandEmpty>
                     <CommandGroup>
                       <CommandList>
-                        {projects.map((project) => (
+                        {searchTypeOptions.map((option) => (
                           <CommandItem
-                            value={project.label}
-                            key={project.value}
+                            value={option.label}
+                            key={option.value}
                             onSelect={() => {
-                              setParams(prev => ({ ...prev, project_id: project.value }))
+                              setParams(prev => ({ ...prev, search_type: option.value }))
+                              setSearchTypeOpen(false)
                             }}
                           >
                             <CheckIcon
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                project.value === params.project_id
+                                option.value === params.search_type
                                   ? "opacity-100"
                                   : "opacity-0"
                               )}
                             />
-                            {project.label}
+                            {option.label}
                           </CommandItem>
                         ))}
                       </CommandList>
@@ -220,42 +282,74 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                 id="max_results"
                 type="number"
                 min="1"
-                max="10"
+                max="50"
                 value={params.max_results}
                 onChange={(e) => setParams(prev => ({ 
                   ...prev, 
-                  max_results: Math.min(10, Math.max(1, parseInt(e.target.value) || 5))
+                  max_results: Math.min(50, Math.max(1, parseInt(e.target.value) || 10))
                 }))}
               />
             </div>
           </div>
 
-          {/* 搜索权重滑块 */}
-          <div className="space-y-4">
-            <Label>搜索权重</Label>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>向量搜索</span>
-                <span>关键词搜索</span>
+          {/* 高级设置 */}
+          {params.search_type === 'Hybrid' && (
+            <div className="space-y-4">
+              <Label>向量搜索权重</Label>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>关键词搜索</span>
+                  <span>向量搜索</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={params.vector_weight || 0.5}
+                    onChange={(e) => setParams(prev => ({ 
+                      ...prev, 
+                      vector_weight: parseFloat(e.target.value) 
+                    }))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{(1 - (params.vector_weight || 0.5)).toFixed(1)}</span>
+                  <span>{(params.vector_weight || 0.5).toFixed(1)}</span>
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={params.vector_weight}
-                  onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                />
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{params.vector_weight.toFixed(1)}</span>
-                <span>{params.keyword_weight.toFixed(1)}</span>
-              </div>
-
             </div>
-          </div>
+          )}
+
+          {/* 相似度阈值 */}
+          {(params.search_type === 'Vector' || params.search_type === 'Hybrid') && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="similarity_threshold">相似度阈值</Label>
+                <span className="text-sm text-muted-foreground">
+                  {(params.similarity_threshold || 0.7).toFixed(1)}
+                </span>
+              </div>
+              <Slider
+                id="similarity_threshold"
+                min={0}
+                max={1}
+                step={0.1}
+                value={[params.similarity_threshold || 0.7]}
+                onValueChange={(value) => setParams(prev => ({ 
+                  ...prev, 
+                  similarity_threshold: value[0]
+                }))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0.0</span>
+                <span>1.0</span>
+              </div>
+            </div>
+          )}
 
           {/* 过滤条件折叠面板 */}
           <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -281,9 +375,9 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">请求方法</Label>
                     {/* 已选择的方法 */}
-                    {params.methods.length > 0 && (
+                    {(params.filters?.methods?.length || 0) > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {params.methods.map((method) => (
+                        {params.filters?.methods?.map((method) => (
                           <Badge key={method} variant="secondary" className="text-xs">
                             {method}
                             <Button
@@ -330,7 +424,7 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                                   <CheckIcon
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      params.methods.includes(method) ? "opacity-100" : "opacity-0"
+                                      params.filters?.methods?.includes(method) ? "opacity-100" : "opacity-0"
                                     )}
                                   />
                                   {method}
@@ -343,47 +437,7 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                     </Popover>
                   </div>
 
-                  {/* Tags 过滤条件 */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">标签</Label>
-                    {/* 已选择的标签 */}
-                    {params.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {params.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto p-0 ml-1"
-                              onClick={() => handleRemoveTag(tag)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {/* 标签输入框 */}
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="输入标签名称，按回车添加"
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={handleTagInputKeyDown}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddTag}
-                        disabled={!tagInput.trim() || params.tags.includes(tagInput.trim())}
-                      >
-                        添加
-                      </Button>
-                    </div>
-                  </div>
+
 
                   {/* Domain 和 Path Prefix 输入框 */}
                   <div className="grid grid-cols-2 gap-4">
@@ -392,8 +446,11 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                       <Input
                         id="domain"
                         placeholder="例如: api.example.com"
-                        value={params.domain}
-                        onChange={(e) => setParams(prev => ({ ...prev, domain: e.target.value }))}
+                        value={params.filters?.domain || ''}
+                        onChange={(e) => setParams(prev => ({ 
+                          ...prev, 
+                          filters: { ...prev.filters, domain: e.target.value }
+                        }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -401,18 +458,27 @@ export function SearchForm({ onSearch, loading }: SearchFormProps) {
                       <Input
                         id="path_prefix"
                         placeholder="例如: /api/v1"
-                        value={params.path_prefix}
-                        onChange={(e) => setParams(prev => ({ ...prev, path_prefix: e.target.value }))}
+                        value={params.filters?.path_prefix || ''}
+                        onChange={(e) => setParams(prev => ({ 
+                          ...prev, 
+                          filters: { ...prev.filters, path_prefix: e.target.value }
+                        }))}
                       />
                     </div>
                   </div>
+
+
                 </CardContent>
               </Card>
             </CollapsibleContent>
-            </Collapsible>
+          </Collapsible>
 
           {/* 搜索按钮 */}
-          <Button type="submit" className="w-full" disabled={loading || !params.query.trim()}>
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={loading || !params.query.trim() || !params.filters?.project_id}
+          >
             <Search className="w-4 h-4 mr-2" />
             {loading ? '搜索中...' : '搜索'}
           </Button>

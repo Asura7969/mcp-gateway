@@ -1,54 +1,77 @@
-export interface SearchParams {
-  query: string
-  project_id: string
-  max_results: number
-  vector_weight: number
-  keyword_weight: number
-  enable_vector_search: boolean
-  enable_keyword_search: boolean
-  search_mode: 'vector' | 'keyword' | 'hybrid'
-  // 过滤条件
-  methods: string[]
-  tags: string[]
-  domain: string
-  path_prefix: string
-  filters?: Record<string, any>
+// 搜索类型枚举，匹配后端SearchType
+export type SearchType = 'Vector' | 'Keyword' | 'Hybrid'
+
+// 项目信息接口
+export interface ProjectInfo {
+  id: string
+  name: string
+  description?: string
+  status: string
 }
 
-// 后端返回的接口数据结构
+// 过滤条件接口
+export interface SearchFilters {
+  project_id?: string
+  methods?: string[]
+  domain?: string
+  path_prefix?: string
+}
+
+// 前端搜索参数接口，匹配后端InterfaceSearchRequest
+export interface SearchParams {
+  query: string
+  search_type: SearchType
+  max_results: number
+  similarity_threshold?: number
+  vector_weight?: number
+  filters?: SearchFilters
+}
+
+// API参数定义
+export interface ApiParameter {
+  name: string
+  param_type: string
+  required: boolean
+  description?: string
+  example?: string
+  default_value?: string
+  enum_values?: string[]
+  format?: string
+}
+
+// 后端返回的接口数据结构，匹配后端ApiInterface
 export interface ApiInterface {
   path: string
   method: string
-  summary: string
-  description: string
-  operation_id: string | null
-  path_params: any[]
-  query_params: any[]
-  header_params: any[]
-  body_params: any[]
-  request_schema: any
-  response_schema: string
+  summary?: string
+  description?: string
+  operation_id?: string
+  path_params: ApiParameter[]
+  query_params: ApiParameter[]
+  header_params: ApiParameter[]
+  body_params: ApiParameter[]
+  request_schema?: string
+  response_schema?: string
   tags: string[]
-  domain: string | null
+  domain?: string
   deprecated: boolean
-  service_description: string
-  embedding: number[]
-  embedding_model: string
+  service_description?: string
+  embedding?: number[]
+  embedding_model?: string
+  embedding_updated_at?: string
 }
 
-// 后端返回的搜索结果项
-export interface SearchResultItem {
-  project_id: string
+// 后端返回的搜索结果项，匹配后端InterfaceWithScore
+export interface InterfaceWithScore {
+  project_id?: string
   interface: ApiInterface
   score: number
   match_reason: string
-  similarity_score: number | null
-  search_type: string
 }
 
-// 后端返回的完整响应结构
-export interface SearchResponse {
-  interfaces: SearchResultItem[]
+// 后端返回的完整响应结构，匹配后端InterfaceSearchResponse
+export interface InterfaceSearchResponse {
+  interfaces: InterfaceWithScore[]
   query_time_ms: number
   total_count: number
   search_mode: string
@@ -69,17 +92,14 @@ export interface SearchResult {
 
 export const defaultSearchParams: SearchParams = {
   query: '',
-  project_id: 'agent-bot',
-  max_results: 5,
+  search_type: 'Hybrid',
+  max_results: 10,
+  similarity_threshold: 0.7,
   vector_weight: 0.5,
-  keyword_weight: 0.5,
-  enable_vector_search: true,
-  enable_keyword_search: true,
-  search_mode: 'hybrid',
-  // 过滤条件默认值
-  methods: [],
-  tags: [],
-  domain: '',
-  path_prefix: '',
-  filters: {}
+  filters: {
+    project_id: undefined,
+    methods: [],
+    domain: '',
+    path_prefix: ''
+  }
 }
