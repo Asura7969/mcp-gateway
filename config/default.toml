@@ -2,6 +2,11 @@
 host = "0.0.0.0"
 port = 3000
 
+[logging]
+level = "debug"
+file_path = "logs/mcp-gateway.log"
+console_output = true
+
 [database]
 url = "mysql://mcpuser:mcppassword@localhost:3306/mcp_gateway"
 max_connections = 5

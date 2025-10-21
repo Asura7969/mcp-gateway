@@ -7,6 +7,7 @@ pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub embedding: EmbeddingConfig,
+    pub logging: LoggingConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -20,6 +21,13 @@ pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
     pub mcp_call_max_connections: u32,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LoggingConfig {
+    pub level: String,
+    pub file_path: String,
+    pub console_output: bool,
 }
 
 /// 向量化配置
@@ -149,6 +157,11 @@ impl Default for Settings {
                     port: "5432".to_string(),
                 }),
                 elasticsearch: None,
+            },
+            logging: LoggingConfig {
+                level: "debug".to_string(),
+                file_path: "logs/mcp-gateway.log".to_string(),
+                console_output: true,
             },
         }
     }

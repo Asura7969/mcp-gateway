@@ -3,22 +3,24 @@ FROM rust:1.89 as builder
 
 WORKDIR /app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Configure rsproxy for faster builds in China
+ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
+ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
 
-# Create a dummy main.rs to build dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependencies
-RUN cargo build --release
-RUN rm src/main.rs
-
-# Copy source code
-COPY src ./src
-COPY migrations ./migrations
-
-# Build application
-RUN cargo build --release
+# Copy and setup cargo config for rsproxy
+RUN mkdir -p ~/.cargo
+COPY docker/cargo-config.toml ~/.cargo/config
+RUN --mount=type=bind,source=src,target=src \
+    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
+    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
+    --mount=type=bind,source=migrations,target=migrations \
+    --mount=type=cache,target=/app/target/ \
+    --mount=type=cache,target=/usr/local/cargo/registry/ \
+    <<EOF
+set -e
+cargo build --locked --release
+cp ./target/release/mcp-gateway /app/mcp-gateway
+EOF
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -27,32 +29,22 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    libcurl4 \
     && rm -rf /var/lib/apt/lists/*
-
-# Create app user
-RUN useradd -m -u 1001 appuser
 
 WORKDIR /app
 
-# Copy binary from builder stage
-COPY --from=builder /app/target/release/mcp-gateway /app/mcp-gateway
-COPY --from=builder /app/migrations /app/migrations
+# Copy the binary from builder stage
+COPY --from=builder /app/mcp-gateway /app/mcp-gateway
 
-# Create config directory
-RUN mkdir -p /app/config
+# Copy migrations and config from host
+COPY migrations /app/migrations
+COPY config /app/config
 
-# Change ownership
-RUN chown -R appuser:appuser /app
+# Create necessary directories
+RUN mkdir -p /app/logs
 
-# Switch to app user
-USER appuser
-
-# Expose port
+# Expose ports
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
-
-# Run the application
-CMD ["./mcp-gateway"]
+CMD ["/app/mcp-gateway"]

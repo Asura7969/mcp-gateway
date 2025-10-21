@@ -21,7 +21,8 @@ use rmcp::transport::{SseServer, StreamableHttpServerConfig, StreamableHttpServi
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::Duration;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, fmt, EnvFilter};
+use std::fs;
 
 use crate::middleware::stream_requests_interceptor;
 use crate::models::DB_POOL;
@@ -42,21 +43,14 @@ use utils::shutdown_signal;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "mcp_gateway=debug,tower_http=debug,axum::rejection=trace".into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    // Load configuration
+    // Load configuration first (before logging setup)
     let settings = Settings::new().unwrap_or_else(|_| {
-        tracing::warn!("Failed to load configuration, using defaults");
+        eprintln!("Failed to load configuration, using defaults");
         Settings::default()
     });
+
+    // Initialize tracing with configuration
+    setup_logging(&settings.logging)?;
 
     tracing::info!("Starting MCP Gateway server...");
     tracing::info!("Configuration: {:?}", settings);
@@ -237,4 +231,46 @@ fn session_counter(
             }
         }
     });
+}
+
+fn setup_logging(logging_config: &config::LoggingConfig) -> anyhow::Result<()> {
+    use std::path::Path;
+    
+    // Create log directory if it doesn't exist
+    let log_path = Path::new(&logging_config.file_path);
+    let parent_dir = log_path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent_dir)?;
+
+    // Create file appender for log file
+    let file_appender = tracing_appender::rolling::daily(
+        parent_dir,
+        log_path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("app.log"))
+    );
+
+    // Set up the log level filter
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            let default_filter = format!(
+                "mcp_gateway={},tower_http={},axum::rejection=trace",
+                logging_config.level, logging_config.level
+            );
+            EnvFilter::new(default_filter)
+        });
+
+    let registry = tracing_subscriber::registry().with(env_filter);
+
+    if logging_config.console_output {
+        // Both console and file output
+        registry
+            .with(fmt::layer())
+            .with(fmt::layer().with_writer(file_appender))
+            .init();
+    } else {
+        // File output only
+        registry
+            .with(fmt::layer().with_writer(file_appender))
+            .init();
+    }
+
+    Ok(())
 }
