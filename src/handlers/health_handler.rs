@@ -15,3 +15,10 @@ pub async fn get_api_health() -> Json<serde_json::Value> {
         }
     }))
 }
+
+pub async fn actuator_health() -> Json<serde_json::Value> {
+    use serde_json::json;
+    Json(json!({
+        "status": "up"
+    }))
+}
