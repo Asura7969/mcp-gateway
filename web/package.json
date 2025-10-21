@@ -1,13 +1,15 @@
 {
-  "name": "shadcn-admin",
+  "name": "mcp-gateway-web",
   "private": false,
   "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "build:prod": "vite build --mode production",
+    "build:dev": "vite build --mode development",
+    "build:test": "vite build --mode test",
     "preview": "vite preview",
+    "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "knip": "knip"
