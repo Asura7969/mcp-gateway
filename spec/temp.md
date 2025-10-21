@@ -30,7 +30,7 @@
   - [ ] 服务状态
   - [ ] mcp会话连接数据
   - [ ] cpu、memory监控
-- [ ] docker部署该项目
+- [x] docker部署该项目
 - [x] readme重写
 
 
