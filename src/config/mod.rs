@@ -111,7 +111,7 @@ impl Default for EmbeddingConfig {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+        let run_mode = env::var("PROFILE").unwrap_or_else(|_| "dev".into());
 
         let s = Config::builder()
             // Start off by merging in the "default" configuration file
