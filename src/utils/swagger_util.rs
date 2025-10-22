@@ -96,11 +96,19 @@ pub fn create_api_detail(
         for (status_code, response) in responses_map {
             if status_code.starts_with("2") {
                 if let Some(content) = &response.content {
-                    if let Some(media_type) = content.get("application/json") {
-                        if let Some(schema) = &media_type.schema {
-                            response_schema = Some(schema_to_json_schema(schema, spec)?);
-                            break;
+                    // Try different content types in order of preference
+                    let content_types = ["application/json", "*/*", "application/*", "text/json"];
+                    for content_type in &content_types {
+                        if let Some(media_type) = content.get(*content_type) {
+                            if let Some(schema) = &media_type.schema {
+                                response_schema = Some(schema_to_json_schema(schema, spec)?);
+                                break;
+                            }
                         }
+                    }
+                    // If we found a schema, break out of the status code loop
+                    if response_schema.is_some() {
+                        break;
                     }
                 }
             }
@@ -157,6 +165,17 @@ pub fn create_mcp_tool(
         .summary
         .clone()
         .unwrap_or_else(|| format!("{} {}", method, path));
+
+    let tool_name = operation.operation_id.clone().unwrap_or_else(|| {
+        format!(
+            "{}_{}_api",
+            method.to_lowercase(),
+            path.replace('/', "_")
+                .replace('{', "")
+                .replace('}', "")
+                .trim_start_matches('_')
+        )
+    });
 
     let description = operation
         .description
@@ -287,7 +306,7 @@ pub fn create_mcp_tool(
     };
 
     Ok(McpTool {
-        name: title.clone(),
+        name: tool_name,
         title,
         description,
         input_schema,

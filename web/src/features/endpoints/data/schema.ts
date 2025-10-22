@@ -5,6 +5,7 @@ export const endpointSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  swagger_content: z.string(),
   status: z.enum(['Running', 'Stopped', 'Deleted']),
   created_at: z.string(),
   updated_at: z.string(),
@@ -14,12 +15,10 @@ export const endpointSchema = z.object({
 export type Endpoint = z.infer<typeof endpointSchema>
 
 // Schema for creating a new endpoint
-export const createEndpointSchema = endpointSchema.omit({
-  id: true,
-  created_at: true,
-  updated_at: true,
-  status: true,
-  connection_count: true,
+export const createEndpointSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable(),
+  swagger_content: z.string(),
 })
 
 export type CreateEndpoint = z.infer<typeof createEndpointSchema>

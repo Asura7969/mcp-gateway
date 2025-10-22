@@ -68,7 +68,8 @@ export function Endpoints() {
 
       <CreateEndpointDialog 
         open={isCreateDialogOpen} 
-        onOpenChange={setIsCreateDialogOpen} 
+        onOpenChange={setIsCreateDialogOpen}
+        onSuccess={fetchData}
       />
     </>
   )
