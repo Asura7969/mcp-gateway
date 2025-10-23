@@ -2,6 +2,7 @@ use crate::models::{
     CreateEndpointRequest, DbPool, Endpoint, EndpointDetailResponse, EndpointMetrics,
     EndpointResponse, EndpointStatus, McpConfig, UpdateEndpointRequest,
 };
+use crate::services::EndpointEvent;
 use crate::utils::{generate_api_details, get_china_time};
 use anyhow::Result;
 use serde_json::Value;
@@ -9,16 +10,15 @@ use sqlx::Row;
 use std::convert::TryInto;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use crate::services::EndpointEvent;
 
 #[derive(Clone)]
 pub struct EndpointService {
     pool: DbPool,
-    event_sender: mpsc::Sender<EndpointEvent>
+    event_sender: mpsc::Sender<EndpointEvent>,
 }
 
 impl EndpointService {
-    pub fn new(pool: DbPool, event_sender: mpsc::Sender<EndpointEvent>,) -> Self {
+    pub fn new(pool: DbPool, event_sender: mpsc::Sender<EndpointEvent>) -> Self {
         Self { pool, event_sender }
     }
 
@@ -32,11 +32,11 @@ impl EndpointService {
     ) -> Result<EndpointResponse> {
         // First, check if an endpoint with the same name already exists
         let existing_endpoint = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name = ? AND status != 'deleted'"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name = ?"
         )
-        .bind(&request.name)
-        .fetch_optional(&self.pool)
-        .await?;
+            .bind(&request.name)
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(endpoint) = existing_endpoint {
             // If endpoint with same name exists, merge the data instead of creating new one
@@ -57,19 +57,21 @@ impl EndpointService {
             sqlx::query(
                 "UPDATE endpoints SET description = COALESCE(?, description), swagger_content = ?, updated_at = ? WHERE id = ?"
             )
-            .bind(&request.description)
-            .bind(serde_json::to_string(&merged_swagger)?)
-            .bind(now)
-            .bind(endpoint.id.to_string())
-            .execute(&self.pool)
-            .await?;
+                .bind(&request.description)
+                .bind(serde_json::to_string(&merged_swagger)?)
+                .bind(now)
+                .bind(endpoint.id.to_string())
+                .execute(&self.pool)
+                .await?;
 
             // Update API paths table with new paths
             self.update_api_paths_table(endpoint.id, &merged_swagger)
                 .await?;
 
             let updated_endpoint = self.get_endpoint_by_id(endpoint.id).await?;
-            self.event_sender.send(EndpointEvent::UPDATE(endpoint.name)).await?;
+            self.event_sender
+                .send(EndpointEvent::UPDATE(endpoint.name))
+                .await?;
             Ok(updated_endpoint.into())
         } else {
             // Create new endpoint
@@ -82,14 +84,14 @@ impl EndpointService {
                 VALUES (?, ?, ?, ?, 'stopped', ?, ?, 0)
                 "#,
             )
-            .bind(id.to_string())
-            .bind(&request.name)
-            .bind(&request.description)
-            .bind(&request.swagger_content)
-            .bind(now)
-            .bind(now)
-            .execute(&self.pool)
-            .await?;
+                .bind(id.to_string())
+                .bind(&request.name)
+                .bind(&request.description)
+                .bind(&request.swagger_content)
+                .bind(now)
+                .bind(now)
+                .execute(&self.pool)
+                .await?;
 
             // Parse swagger content and populate API paths table
             let swagger_spec: Value = serde_json::from_str(&request.swagger_content)?;
@@ -97,7 +99,9 @@ impl EndpointService {
 
             let endpoint = self.get_endpoint_by_id(id).await?;
 
-            self.event_sender.send(EndpointEvent::Created(endpoint.name.clone())).await?;
+            self.event_sender
+                .send(EndpointEvent::Created(endpoint.name.clone()))
+                .await?;
 
             Ok(endpoint.into())
         }
@@ -187,15 +191,15 @@ impl EndpointService {
                         sqlx::query(
                             "INSERT INTO api_paths (id, endpoint_id, path, method, operation_id, summary, description) VALUES (?, ?, ?, ?, ?, ?, ?)"
                         )
-                        .bind(api_path_id.to_string())
-                        .bind(endpoint_id.to_string())
-                        .bind(path)
-                        .bind(method.to_uppercase())
-                        .bind(operation_id)
-                        .bind(summary)
-                        .bind(description)
-                        .execute(&self.pool)
-                        .await?;
+                            .bind(api_path_id.to_string())
+                            .bind(endpoint_id.to_string())
+                            .bind(path)
+                            .bind(method.to_uppercase())
+                            .bind(operation_id)
+                            .bind(summary)
+                            .bind(description)
+                            .execute(&self.pool)
+                            .await?;
                     }
                 }
             }
@@ -206,10 +210,10 @@ impl EndpointService {
 
     pub async fn get_endpoints(&self) -> Result<Vec<EndpointResponse>> {
         let endpoints = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE status != 'deleted' ORDER BY created_at DESC"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints ORDER BY created_at DESC"
         )
-        .fetch_all(&self.pool)
-        .await?;
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(endpoints.into_iter().map(|e| e.into()).collect())
     }
@@ -217,10 +221,10 @@ impl EndpointService {
     /// Get all endpoints with full data (including swagger_content)
     pub async fn get_all_endpoints(&self) -> Result<Vec<Endpoint>> {
         let endpoints = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE status != 'deleted' ORDER BY created_at DESC"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints ORDER BY created_at DESC"
         )
-        .fetch_all(&self.pool)
-        .await?;
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(endpoints)
     }
@@ -238,7 +242,7 @@ impl EndpointService {
         let offset = (page - 1) * page_size;
 
         // Build the base query
-        let mut where_conditions = vec!["status != 'deleted'".to_string()];
+        let mut where_conditions: Vec<String> = vec![];
         let mut params: Vec<String> = vec![];
 
         // Add search condition
@@ -259,13 +263,23 @@ impl EndpointService {
             }
         }
 
-        let where_clause = where_conditions.join(" AND ");
+        // Build WHERE clause
+        let (where_clause, count_query, query) = if where_conditions.is_empty() {
+            (
+                String::new(),
+                "SELECT COUNT(*) as total FROM endpoints".to_string(),
+                "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints ORDER BY created_at DESC LIMIT ? OFFSET ?".to_string(),
+            )
+        } else {
+            let where_clause = where_conditions.join(" AND ");
+            (
+                where_clause.clone(),
+                format!("SELECT COUNT(*) as total FROM endpoints WHERE {}", where_clause),
+                format!("SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE {} ORDER BY created_at DESC LIMIT ? OFFSET ?", where_clause),
+            )
+        };
 
         // Count total records
-        let count_query = format!(
-            "SELECT COUNT(*) as total FROM endpoints WHERE {}",
-            where_clause
-        );
         let mut count_query_builder = sqlx::query(&count_query);
         for param in &params {
             count_query_builder = count_query_builder.bind(param);
@@ -274,10 +288,6 @@ impl EndpointService {
         let total: i64 = count_result.get("total");
 
         // Fetch paginated results
-        let query = format!(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            where_clause
-        );
 
         let mut query_builder = sqlx::query_as::<_, Endpoint>(&query);
         for param in &params {
@@ -295,18 +305,19 @@ impl EndpointService {
 
     pub async fn get_endpoint_by_id(&self, id: Uuid) -> Result<Endpoint> {
         let endpoint = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE id = ? AND status != 'deleted'"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE id = ?"
         )
-        .bind(id.to_string())
-        .fetch_one(&self.pool)
-        .await?;
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Endpoint not found"))?;
 
         Ok(endpoint)
     }
 
     pub async fn get_endpoint_by_name(&self, name: String) -> Result<Endpoint> {
         let endpoint = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name = ? limit 1"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name = ?"
         )
             .bind(name)
             .fetch_one(&self.pool)
@@ -325,7 +336,7 @@ impl EndpointService {
         let in_clause = placeholders.join(", ");
 
         let query = format!(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name IN ({}) AND status != 'deleted'",
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE name IN ({})",
             in_clause
         );
 
@@ -449,22 +460,26 @@ impl EndpointService {
         query_builder.execute(&self.pool).await?;
 
         let endpoint = self.get_endpoint_by_id(id).await?;
-        self.event_sender.send(EndpointEvent::UPDATE(endpoint.name.clone())).await?;
+        self.event_sender
+            .send(EndpointEvent::UPDATE(endpoint.name.clone()))
+            .await?;
         Ok(endpoint.into())
     }
 
     pub async fn delete_endpoint(&self, id: Uuid) -> Result<()> {
         match self.get_endpoint_by_id(id).await {
             Ok(endpoint) => {
-                sqlx::query("UPDATE endpoints SET status = 'deleted', updated_at = ? WHERE id = ?")
-                    .bind(get_china_time())
+                // 物理删除端点记录
+                sqlx::query("DELETE FROM endpoints WHERE id = ?")
                     .bind(id.to_string())
                     .execute(&self.pool)
                     .await?;
-                self.event_sender.send(EndpointEvent::DELETE(endpoint.name)).await?;
+                self.event_sender
+                    .send(EndpointEvent::DELETE(endpoint.name))
+                    .await?;
                 Ok(())
             }
-            Err(_) => Ok(())
+            Err(_) => Ok(()),
         }
     }
 
@@ -472,9 +487,9 @@ impl EndpointService {
         let metrics = sqlx::query(
             "SELECT endpoint_id, request_count, response_count, error_count, avg_response_time, current_connections, total_connection_time FROM endpoint_metrics WHERE endpoint_id = ?"
         )
-        .bind(id.to_string())
-        .fetch_optional(&self.pool)
-        .await?;
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
 
         if let Some(row) = metrics {
             // Handle DECIMAL to f64 conversion
@@ -496,10 +511,10 @@ impl EndpointService {
             sqlx::query(
                 "INSERT INTO endpoint_metrics (id, endpoint_id, request_count, response_count, error_count, avg_response_time, current_connections, total_connection_time) VALUES (?, ?, 0, 0, 0, 0.0, 0, 0)"
             )
-            .bind(metrics_id.to_string())
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await?;
+                .bind(metrics_id.to_string())
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await?;
 
             Ok(EndpointMetrics {
                 endpoint_id: id,
@@ -516,7 +531,7 @@ impl EndpointService {
     /// Get metrics for all endpoints
     pub async fn get_all_endpoint_metrics(&self) -> Result<Vec<EndpointMetrics>> {
         // First get all active endpoint IDs
-        let endpoint_ids = sqlx::query("SELECT id FROM endpoints WHERE status != 'deleted'")
+        let endpoint_ids = sqlx::query("SELECT id FROM endpoints")
             .fetch_all(&self.pool)
             .await?;
 
@@ -652,8 +667,8 @@ mod tests {
             name: "Merge Test Endpoint".to_string(),
             description: Some("First endpoint".to_string()),
             swagger_content:
-                r#"{"openapi":"3.0.0", "paths": {"/test1": {"get": {"summary": "Test 1"}}}}"#
-                    .to_string(),
+            r#"{"openapi":"3.0.0", "paths": {"/test1": {"get": {"summary": "Test 1"}}}}"#
+                .to_string(),
         };
 
         let result1 = service.create_endpoint(request1).await;
@@ -665,8 +680,8 @@ mod tests {
             name: "Merge Test Endpoint".to_string(),
             description: Some("Second endpoint".to_string()),
             swagger_content:
-                r#"{"openapi":"3.0.0", "paths": {"/test2": {"post": {"summary": "Test 2"}}}}"#
-                    .to_string(),
+            r#"{"openapi":"3.0.0", "paths": {"/test2": {"post": {"summary": "Test 2"}}}}"#
+                .to_string(),
         };
 
         let result2 = service.create_endpoint(request2).await;

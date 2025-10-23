@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -15,11 +15,19 @@ export function Endpoints() {
   const [data, setData] = useState<Endpoint[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchData = async () => {
+  const fetchData = async (search?: string) => {
     try {
-      // 使用分页 API 获取端点数据
-      const response = await EndpointsApiService.getEndpointsPaginated()
+      setLoading(true)
+      // 使用分页 API 获取端点数据，传递搜索参数
+      const response = await EndpointsApiService.getEndpointsPaginated(
+        undefined, // page
+        undefined, // pageSize
+        search,    // search
+        undefined  // status
+      )
       setData(response.endpoints)
     } catch (error) {
       console.error('Failed to fetch endpoints:', error)
@@ -30,13 +38,44 @@ export function Endpoints() {
     }
   }
 
+  const debouncedFetchData = useCallback((query: string) => {
+    // 清除之前的定时器
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    // 设置新的定时器，500ms 后执行搜索
+    debounceTimerRef.current = setTimeout(() => {
+      fetchData(query)
+    }, 500)
+  }, [])
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    // 如果查询为空，立即执行搜索
+    if (query.trim() === '') {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      fetchData('')
+    } else {
+      // 否则使用防抖搜索
+      debouncedFetchData(query)
+    }
+  }
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     fetchData()
   }, [])
-
-  if (loading) {
-    return <div>Loading...</div>
-  }
 
   return (
     <>
@@ -62,12 +101,18 @@ export function Endpoints() {
           </Button>
         </div>
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
-          <EndpointsTable data={data} onDataReload={fetchData} />
+          <EndpointsTable
+            data={data}
+            onDataReload={() => fetchData(searchQuery)}
+            onSearch={handleSearch}
+            searchQuery={searchQuery}
+            loading={loading}
+          />
         </div>
       </Main>
 
-      <CreateEndpointDialog 
-        open={isCreateDialogOpen} 
+      <CreateEndpointDialog
+        open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         onSuccess={fetchData}
       />

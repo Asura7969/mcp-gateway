@@ -152,16 +152,16 @@ impl McpService {
         let endpoint = sqlx::query_as::<_, Endpoint>(
             "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE id = ?"
         )
-        .bind(endpoint_id.to_string())
-        .fetch_one(&self.pool)
-        .await?;
+            .bind(endpoint_id.to_string())
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(endpoint)
     }
 
     pub async fn get_endpoints(&self) -> Result<Vec<Endpoint>> {
         let endpoints = sqlx::query_as::<_, Endpoint>(
-            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints WHERE status != 'deleted' ORDER BY created_at DESC"
+            "SELECT id, name, description, swagger_content, status, created_at, updated_at, connection_count FROM endpoints ORDER BY created_at DESC"
         )
             .fetch_all(&self.pool)
             .await?;

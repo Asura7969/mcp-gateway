@@ -177,11 +177,21 @@ pub fn create_mcp_tool(
         )
     });
 
-    let description = operation
-        .description
-        .clone()
-        .or_else(|| operation.summary.clone())
-        .unwrap_or_else(|| format!("{} API for {}", method, path));
+    let description = if let Some(desc) = operation.description.clone() {
+        if !desc.is_empty() {
+            desc
+        } else {
+            operation.summary.clone().unwrap_or_else(|| format!("{} API for {}", method, path))
+        }
+    } else {
+        operation.summary.clone().unwrap_or_else(|| format!("{} API for {}", method, path))
+    };
+
+    // let description = operation
+    //     .description
+    //     .clone()
+    //     .or_else(|| operation.summary.clone())
+    //     .unwrap_or_else(|| format!("{} API for {}", method, path));
 
     // Build input schema
     let mut properties = serde_json::Map::new();
@@ -307,8 +317,8 @@ pub fn create_mcp_tool(
 
     Ok(McpTool {
         name: tool_name,
-        title,
-        description,
+        title: description,
+        description: title,
         input_schema,
         output_schema,
     })
@@ -318,8 +328,47 @@ pub fn schema_to_json_schema(
     schema: &crate::models::Schema,
     spec: &SwaggerSpec,
 ) -> anyhow::Result<Value> {
-    // Handle $ref references
+    let mut visited_refs = std::collections::HashSet::new();
+    let mut ref_cache = std::collections::HashMap::new();
+    schema_to_json_schema_with_context(schema, spec, &mut visited_refs, &mut ref_cache, 0)
+}
+
+fn schema_to_json_schema_with_context(
+    schema: &crate::models::Schema,
+    spec: &SwaggerSpec,
+    visited_refs: &mut std::collections::HashSet<String>,
+    ref_cache: &mut std::collections::HashMap<String, Value>,
+    depth: usize,
+) -> anyhow::Result<Value> {
+    // Prevent infinite recursion by limiting depth
+    const MAX_DEPTH: usize = 50;
+    if depth > MAX_DEPTH {
+        tracing::warn!("Schema parsing depth limit reached ({}), returning simplified schema", MAX_DEPTH);
+        return Ok(serde_json::json!({
+            "type": "object",
+            "description": "Schema too deep - simplified to prevent stack overflow"
+        }));
+    }
+
+    // Handle $ref references with cycle detection and caching
     if let Some(reference) = &schema.reference {
+        // Check cache first
+        if let Some(cached_result) = ref_cache.get(reference) {
+            return Ok(cached_result.clone());
+        }
+
+        // Check for circular references
+        if visited_refs.contains(reference) {
+            tracing::warn!("Circular reference detected: {}, breaking cycle", reference);
+            let fallback_result = serde_json::json!({
+                "$ref": reference,
+                "description": "Circular reference - resolved to prevent infinite recursion"
+            });
+            // Cache the fallback result
+            ref_cache.insert(reference.clone(), fallback_result.clone());
+            return Ok(fallback_result);
+        }
+
         // 解析引用，例如 "#/components/schemas/BotAgentDto"
         if reference.starts_with("#/components/schemas/") {
             let schema_name = &reference["#/components/schemas/".len()..];
@@ -327,16 +376,37 @@ pub fn schema_to_json_schema(
             if let Some(components) = &spec.components {
                 if let Some(schemas) = &components.schemas {
                     if let Some(referenced_schema) = schemas.get(schema_name) {
+                        // Add to visited set before recursing
+                        visited_refs.insert(reference.clone());
+
                         // 递归解析引用的模式
-                        return schema_to_json_schema(referenced_schema, spec);
+                        let result = schema_to_json_schema_with_context(
+                            referenced_schema,
+                            spec,
+                            visited_refs,
+                            ref_cache,
+                            depth + 1
+                        );
+
+                        // Remove from visited set after processing
+                        visited_refs.remove(reference);
+
+                        // Cache the result if successful
+                        if let Ok(ref result_value) = result {
+                            ref_cache.insert(reference.clone(), result_value.clone());
+                        }
+
+                        return result;
                     }
                 }
             }
         }
         // 如果无法解析引用，返回包含引用信息的对象
-        return Ok(serde_json::json!({
+        let fallback_result = serde_json::json!({
             "$ref": reference
-        }));
+        });
+        ref_cache.insert(reference.clone(), fallback_result.clone());
+        return Ok(fallback_result);
     }
 
     let mut json_schema = serde_json::Map::new();
@@ -359,13 +429,35 @@ pub fn schema_to_json_schema(
     if let Some(properties) = &schema.properties {
         let mut props = serde_json::Map::new();
         for (key, prop_schema) in properties {
-            props.insert(key.clone(), schema_to_json_schema(prop_schema, spec)?);
+            match schema_to_json_schema_with_context(prop_schema, spec, visited_refs, ref_cache, depth + 1) {
+                Ok(prop_json) => {
+                    props.insert(key.clone(), prop_json);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to process property '{}': {}, using fallback", key, e);
+                    props.insert(key.clone(), serde_json::json!({
+                        "type": "string",
+                        "description": format!("Property processing failed: {}", e)
+                    }));
+                }
+            }
         }
         json_schema.insert("properties".to_string(), Value::Object(props));
     }
 
     if let Some(items) = &schema.items {
-        json_schema.insert("items".to_string(), schema_to_json_schema(items, spec)?);
+        match schema_to_json_schema_with_context(items, spec, visited_refs, ref_cache, depth + 1) {
+            Ok(items_json) => {
+                json_schema.insert("items".to_string(), items_json);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to process array items: {}, using fallback", e);
+                json_schema.insert("items".to_string(), serde_json::json!({
+                    "type": "string",
+                    "description": format!("Items processing failed: {}", e)
+                }));
+            }
+        }
     }
 
     if let Some(required) = &schema.required {
@@ -387,10 +479,10 @@ pub async fn update_metrics(pool: &DbPool, endpoint_id: Uuid, success: bool) -> 
              error_count = error_count + ?
              WHERE endpoint_id = ?",
     )
-    .bind(error_increment)
-    .bind(endpoint_id.to_string())
-    .execute(pool)
-    .await?;
+        .bind(error_increment)
+        .bind(endpoint_id.to_string())
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -892,9 +984,9 @@ mod tests {
 
         let tools_array = generate_mcp_tools(&spec_array)?;
         let tool_array = &tools_array[0];
-        let properties_array = tool_array.input_schema["properties"].as_object().unwrap();
-        assert!(properties_array.contains_key("items"));
-        assert_eq!(properties_array["items"]["type"], "array");
+        // For array type request body, the input schema should be the array itself
+        assert_eq!(tool_array.input_schema["type"], "array");
+        assert_eq!(tool_array.input_schema["items"]["type"], "string");
 
         Ok(())
     }

@@ -39,6 +39,7 @@ impl Adapter {
         if let Ok(endpoint) = self.get_endpoint(endpoint_id).await {
             let tools = <Vec<Tool>>::from(&endpoint);
             tracing::info!("tools size: {}", tools.len());
+            tracing::debug!("tools content: {:?}", tools);
             Ok(ListToolsResult::with_all_items(tools))
         } else {
             tracing::info!("empty tools");

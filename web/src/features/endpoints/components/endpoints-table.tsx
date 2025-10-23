@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   type ColumnFiltersState,
   type SortingState,
@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input'
 import { DataTablePagination } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Eye, Edit, Trash2, Settings, Copy, RefreshCw } from 'lucide-react'
+import { Eye, Edit, Trash2, Settings, Copy, RefreshCw, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -42,164 +42,185 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { type Endpoint } from '../data/schema'
 import { EndpointsApiService } from '../data/api'
+import { AxiosError } from 'axios'
 
-// 创建深色主题样式
-const darkSyntaxStyle = {
-  hljs: {
-    background: '#1f1f23',
-    color: '#f0f0f0'
-  },
-  'hljs-subst': {
-    color: '#f0f0f0'
-  },
-  'hljs-comment': {
-    color: '#a0a0a0'
-  },
-  'hljs-keyword': {
-    color: '#4096ff'
-  },
-  'hljs-attribute': {
-    color: '#4096ff'
-  },
-  'hljs-selector-tag': {
-    color: '#4096ff'
-  },
-  'hljs-meta-keyword': {
-    color: '#4096ff'
-  },
-  'hljs-doctag': {
-    color: '#4096ff'
-  },
-  'hljs-name': {
-    color: '#4096ff'
-  },
-  'hljs-built_in': {
-    color: '#52c41a'
-  },
-  'hljs-literal': {
-    color: '#52c41a'
-  },
-  'hljs-bullet': {
-    color: '#52c41a'
-  },
-  'hljs-code': {
-    color: '#52c41a'
-  },
-  'hljs-addition': {
-    color: '#52c41a'
-  },
-  'hljs-regexp': {
-    color: '#faad14'
-  },
-  'hljs-symbol': {
-    color: '#faad14'
-  },
-  'hljs-variable': {
-    color: '#faad14'
-  },
-  'hljs-template-variable': {
-    color: '#faad14'
-  },
-  'hljs-link': {
-    color: '#faad14'
-  },
-  'hljs-selector-attr': {
-    color: '#faad14'
-  },
-  'hljs-selector-pseudo': {
-    color: '#faad14'
-  },
-  'hljs-type': {
-    color: '#722ed1'
-  },
-  'hljs-string': {
-    color: '#722ed1'
-  },
-  'hljs-number': {
-    color: '#722ed1'
-  },
-  'hljs-selector-id': {
-    color: '#722ed1'
-  },
-  'hljs-selector-class': {
-    color: '#722ed1'
-  },
-  'hljs-quote': {
-    color: '#722ed1'
-  },
-  'hljs-template-tag': {
-    color: '#722ed1'
-  },
-  'hljs-deletion': {
-    color: '#ff4d4f'
-  },
-  'hljs-title': {
-    color: '#ff4d4f'
-  },
-  'hljs-section': {
-    color: '#ff4d4f'
-  },
-  'hljs-function': {
-    color: '#ff4d4f'
-  },
-  'hljs-meta': {
-    color: '#ff4d4f'
-  },
-  'hljs-emphasis': {
-    fontStyle: 'italic'
-  },
-  'hljs-strong': {
-    fontWeight: 'bold'
-  }
+// 懒加载的API详情组件
+const LazyApiDetails = ({ api }: { api: any }) => {
+  return (
+    <div className='space-y-2 text-xs'>
+      <div>
+        <span className='font-medium text-xs'>路径:</span> <span className="text-xs">{api.path}</span>
+      </div>
+      {api.summary && (
+        <div>
+          <span className='font-medium text-xs'>摘要:</span> <span className="text-xs">{api.summary}</span>
+        </div>
+      )}
+      {api.description && (
+        <div>
+          <span className='font-medium text-xs'>描述:</span> <span className="text-xs">{api.description}</span>
+        </div>
+      )}
+      {api.path_params && api.path_params.length > 0 && (
+        <div>
+          <span className='font-medium text-xs'>路径参数:</span>
+          <ul className='list-disc list-inside ml-4 text-xs'>
+            {api.path_params.map((param: any, paramIndex: number) => (
+              <li key={paramIndex} className="text-xs">
+                {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
+                {param.description && ` - ${param.description}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {api.query_params && api.query_params.length > 0 && (
+        <div>
+          <span className='font-medium text-xs'>查询参数:</span>
+          <ul className='list-disc list-inside ml-4 text-xs'>
+            {api.query_params.map((param: any, paramIndex: number) => (
+              <li key={paramIndex} className="text-xs">
+                {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
+                {param.description && ` - ${param.description}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(api.request_body_schema || api.response_schema) && (
+        <div className={api.request_body_schema && api.response_schema && (
+          (api.request_body_schema.type === 'array' && api.request_body_schema.items) ||
+          (api.request_body_schema.properties && Object.keys(api.request_body_schema.properties).length > 0) ||
+          (api.request_body_schema.type && api.request_body_schema.type !== 'object')
+        ) && (
+          (api.response_schema.type === 'array' && api.response_schema.items) ||
+          (api.response_schema.properties && Object.keys(api.response_schema.properties).length > 0) ||
+          (api.response_schema.type && api.response_schema.type !== 'object')
+        ) ? "grid grid-cols-1 md:grid-cols-2 gap-4" : ""}>
+          {api.request_body_schema && (
+            (api.request_body_schema.type === 'array' && api.request_body_schema.items) ||
+            (api.request_body_schema.properties && Object.keys(api.request_body_schema.properties).length > 0) ||
+            (api.request_body_schema.type && api.request_body_schema.type !== 'object')
+          ) && (
+            <div>
+              <ApiFieldDisplay schema={api.request_body_schema} title="请求体" />
+            </div>
+          )}
+          {api.response_schema && (
+            (api.response_schema.type === 'array' && api.response_schema.items) ||
+            (api.response_schema.properties && Object.keys(api.response_schema.properties).length > 0) ||
+            (api.response_schema.type && api.response_schema.type !== 'object')
+          ) && (
+            <div>
+              <ApiFieldDisplay schema={api.response_schema} title="响应体" />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
-// JSON高亮组件
 const JsonHighlighter = ({ children, className = "" }: { children: string; className?: string }) => {
-  const isDarkMode = document.documentElement.classList.contains('dark')
-  
+  const [shouldRender, setShouldRender] = useState(false)
+
+  // 缓存格式化的JSON字符串
+  const formattedJson = useMemo(() => {
+    try {
+      // 如果字符串太长，先检查是否需要渲染
+      if (children.length > 10000 && !shouldRender) {
+        return children.substring(0, 1000) + '\n... (点击展开查看完整内容)'
+      }
+      return children
+    } catch {
+      return children
+    }
+  }, [children, shouldRender])
+
+  // 懒加载处理
+  const handleToggleRender = useCallback(() => {
+    setShouldRender(prev => !prev)
+  }, [])
+
+  // 检查是否为大型JSON
+  const isLargeJson = children.length > 10000
+
+  if (isLargeJson && !shouldRender) {
+    return (
+      <div className={`${className} p-4`}>
+        <div className="flex items-center justify-end mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleRender}
+            className="text-xs"
+          >
+            展开查看
+          </Button>
+        </div>
+        <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+          {formattedJson}
+        </pre>
+      </div>
+    )
+  }
+
   return (
-    <SyntaxHighlighter 
-      language="json" 
-      style={isDarkMode ? darkSyntaxStyle : github} 
-      className={className}
-      customStyle={{ 
-        backgroundColor: 'inherit',
-        margin: 0,
-        padding: '12px' // 保持p-3的padding
-      }}
-    >
-      {children}
-    </SyntaxHighlighter>
+    <div className={className}>
+      <SyntaxHighlighter
+        language="json"
+        style={github}
+        customStyle={{
+          background: 'transparent',
+          padding: '1rem',
+          fontSize: '0.875rem',
+          lineHeight: '1.25rem',
+        }}
+        wrapLongLines={true}
+        showLineNumbers={false}
+      >
+        {formattedJson}
+      </SyntaxHighlighter>
+    </div>
   )
 }
 
 // 定义操作列组件
-const ActionsCell = ({ 
-  row,
-  onView,
-  onEdit,
-  onDelete,
-  onConfig,
-  onSync,
-  isSyncing
-}: {
+const ActionsCell = ({
+                       row,
+                       onView,
+                       onEdit,
+                       onDelete,
+                       onConfig,
+                       onSync,
+                       isSyncing,
+                       loadingDetailId
+                     }: {
   row: Row<Endpoint>,
   onView: (row: Row<Endpoint>) => void,
   onEdit: (row: Row<Endpoint>) => void,
   onDelete: (row: Row<Endpoint>) => void,
   onConfig: (row: Row<Endpoint>) => void,
   onSync: (row: Row<Endpoint>) => void,
-  isSyncing: boolean
+  isSyncing: boolean,
+  loadingDetailId: string | null
 }) => {
+  const isLoadingDetail = loadingDetailId === row.original.id
+
   return (
     <div className='flex items-center gap-2'>
       <Button
         variant='outline'
         size='sm'
         onClick={() => onView(row)}
+        disabled={isLoadingDetail}
         className='h-8 w-8 p-0'
       >
-        <Eye className='h-4 w-4' />
+        {isLoadingDetail ? (
+          <Loader2 className='h-4 w-4 animate-spin' />
+        ) : (
+          <Eye className='h-4 w-4' />
+        )}
         <span className='sr-only'>查看</span>
       </Button>
       <Button
@@ -246,14 +267,15 @@ const ActionsCell = ({
 type DataTableProps = {
   data: Endpoint[]
   onDataReload?: () => void
+  onSearch?: (query: string) => void
+  searchQuery?: string
+  loading?: boolean
 }
 
-export function EndpointsTable({ data, onDataReload }: DataTableProps) {
+export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '', loading = false }: DataTableProps) {
   // Local UI-only states
-  const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [globalFilter, setGlobalFilter] = useState('')
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [pagination, setPagination] = useState({
     pageIndex: 0,
@@ -271,6 +293,10 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   const [endpointDetail, setEndpointDetail] = useState<any>(null)
   const [openApiDetails, setOpenApiDetails] = useState<Record<string, boolean>>({})
   const [copied, setCopied] = useState(false)
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null)
+
+  // 添加缓存状态
+  const [detailCache, setDetailCache] = useState<Map<string, any>>(new Map())
 
   // 添加ESC键关闭功能
   useEffect(() => {
@@ -292,33 +318,12 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   // 定义列
   const columns = [
     {
-      id: 'select',
-      header: ({ table }: any) => (
-        <input
-          type="checkbox"
-          checked={table.getIsAllPageRowsSelected()}
-          onChange={table.toggleAllPageRowsSelected}
-        />
-      ),
-      cell: ({ row }: any) => (
-        <input
-          type="checkbox"
-          checked={row.getIsSelected()}
-          onChange={row.toggleSelected}
-        />
-      ),
-    },
-    {
       accessorKey: 'name',
       header: 'service',
     },
     {
       accessorKey: 'description',
       header: 'description',
-    },
-    {
-      accessorKey: 'connection_count',
-      header: 'connection count',
     },
     {
       accessorKey: 'created_at',
@@ -332,7 +337,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
       id: 'actions',
       header: 'action',
       cell: ({ row }: { row: Row<Endpoint> }) => (
-        <ActionsCell 
+        <ActionsCell
           row={row}
           onView={handleView}
           onEdit={handleEdit}
@@ -340,6 +345,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
           onConfig={handleConfig}
           onSync={handleSync}
           isSyncing={isSyncing}
+          loadingDetailId={loadingDetailId}
         />
       ),
     },
@@ -351,21 +357,11 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
     state: {
       sorting,
       columnVisibility,
-      rowSelection,
       columnFilters,
-      globalFilter,
       pagination,
     },
-    enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    globalFilterFn: (row, _columnId, filterValue) => {
-      const name = String(row.getValue('name')).toLowerCase()
-      const searchValue = String(filterValue).toLowerCase()
-
-      return name.includes(searchValue)
-    },
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -373,7 +369,6 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
     onPaginationChange: setPagination,
-    onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
   })
 
@@ -388,7 +383,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
       DELETE: 'bg-red-100 text-red-800',
       PATCH: 'bg-primary/10 text-primary',
     }
-    
+
     return methodClassMap[method] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
   }
 
@@ -410,26 +405,80 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   }
 
   // 处理查看操作
-  const handleView = async (row: Row<Endpoint>) => {
+  // 优化的handleView函数，支持缓存和预处理
+  const handleView = useCallback(async (row: Row<Endpoint>) => {
+    const endpointId = row.original.id
+
     try {
+      setLoadingDetailId(endpointId)
       setSelectedEndpoint(row.original)
-      const detail = await EndpointsApiService.getEndpointById(row.original.id)
-      setEndpointDetail(detail)
-      
-      // 初始化第一个API详情为展开状态
-      if (detail?.api_details) {
+
+      // 检查缓存
+      if (detailCache.has(endpointId)) {
+        const cachedDetail = detailCache.get(endpointId)
+        setEndpointDetail(cachedDetail)
+
+        // 初始化API详情状态
+        if (cachedDetail?.api_details) {
+          const initialOpenState: Record<string, boolean> = {}
+          cachedDetail.api_details.forEach((_: any, index: number) => {
+            initialOpenState[index] = index === 0
+          })
+          setOpenApiDetails(initialOpenState)
+        }
+
+        // 立即打开对话框（缓存数据）
+        setIsViewOpen(true)
+        setLoadingDetailId(null)
+        return
+      }
+
+      // 获取详情数据
+      const detail = await EndpointsApiService.getEndpointById(endpointId)
+
+      // 预处理数据以提高渲染性能
+      const processedDetail = {
+        ...detail,
+        // 预处理swagger_spec字符串
+        swagger_spec_string: detail.swagger_spec
+          ? JSON.stringify(detail.swagger_spec, null, 2)
+          : null,
+        // 预处理API详情
+        processed_api_details: detail.api_details?.map((api: any, index: number) => ({
+          ...api,
+          id: `api_${index}`,
+          // 预处理大型JSON字段
+          request_schema_string: api.request_schema
+            ? JSON.stringify(api.request_schema, null, 2)
+            : null,
+          response_schema_string: api.response_schema
+            ? JSON.stringify(api.response_schema, null, 2)
+            : null,
+        })) || []
+      }
+
+      // 缓存处理后的数据
+      setDetailCache(prev => new Map(prev).set(endpointId, processedDetail))
+      setEndpointDetail(processedDetail)
+
+      // 初始化API详情状态
+      if (processedDetail.processed_api_details?.length > 0) {
         const initialOpenState: Record<string, boolean> = {}
-        detail.api_details.forEach((_: any, index: number) => {
+        processedDetail.processed_api_details.forEach((_: any, index: number) => {
           initialOpenState[index] = index === 0 // 默认展开第一个
         })
         setOpenApiDetails(initialOpenState)
       }
-      
+
+      // 数据加载完成后再打开对话框
       setIsViewOpen(true)
     } catch (error) {
       console.error('Failed to fetch endpoint detail:', error)
+      toast.error('获取端点详情失败，请稍后重试')
+    } finally {
+      setLoadingDetailId(null)
     }
-  }
+  }, [detailCache])
 
   // 处理编辑操作
   const handleEdit = async (row: Row<Endpoint>) => {
@@ -456,38 +505,61 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
   }
 
   // 处理同步操作
-   const handleSync = async (row: Row<Endpoint>) => {
-     setIsSyncing(true)
-     try {
-       await EndpointsApiService.syncEndpoint(row.original.name)
-       toast.success('同步成功')
-       onDataReload?.()
-     } catch (error) {
-       console.error('Failed to sync endpoint:', error)
-       toast.error('同步失败', {
-         description: (error as Error).message || '未知错误',
-         duration: 10000,
-         closeButton: true,
-       })
-     } finally {
-       setIsSyncing(false)
-     }
-   }
+  const handleSync = async (row: Row<Endpoint>) => {
+    setIsSyncing(true)
+    try {
+      await EndpointsApiService.syncEndpoint(row.original.name)
+      toast.success('同步成功')
+      onDataReload?.()
+    } catch (error) {
+      console.error('Failed to sync endpoint:', error)
+
+      let errorMessage = '未知错误'
+      if (error instanceof AxiosError) {
+        // 尝试从响应中提取错误信息
+        if (error.response?.data) {
+          // 如果响应数据是字符串（纯文本错误）
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data
+          } else {
+            // 如果响应数据是对象（JSON错误）
+            errorMessage = error.response.data.message ||
+              error.response.data.error ||
+              error.response.data.title ||
+              error.message ||
+              '未知错误'
+          }
+        } else {
+          errorMessage = error.message || '未知错误'
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+
+      toast.error('同步失败', {
+        description: errorMessage,
+        duration: 10000,
+        closeButton: true,
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   // 处理更新端点操作
   const handleUpdateEndpoint = async () => {
     if (!selectedEndpoint || !endpointDetail) return
-    
+
     try {
       // 获取表单中的输入值
       const nameInput = document.querySelector('input[type="text"]') as HTMLInputElement
       const swaggerTextarea = document.querySelector('textarea') as HTMLTextAreaElement
-      
+
       const updateData = {
         name: nameInput?.value || endpointDetail.name,
         swagger_content: swaggerTextarea?.value || ''
       }
-      
+
       await EndpointsApiService.updateEndpoint(selectedEndpoint.id, updateData)
       setIsEditOpen(false)
       // 调用父组件的重新加载函数而不是刷新整个页面
@@ -496,8 +568,31 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
       }
     } catch (error) {
       console.error('Failed to update endpoint:', error)
+
+      let errorMessage = '未知错误'
+      if (error instanceof AxiosError) {
+        // 尝试从响应中提取错误信息
+        if (error.response?.data) {
+          // 如果响应数据是字符串（纯文本错误）
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data
+          } else {
+            // 如果响应数据是对象（JSON错误）
+            errorMessage = error.response.data.message ||
+              error.response.data.error ||
+              error.response.data.title ||
+              error.message ||
+              '未知错误'
+          }
+        } else {
+          errorMessage = error.message || '未知错误'
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+
       toast.error('更新端点失败', {
-        description: (error as Error).message || '未知错误',
+        description: errorMessage,
         duration: 10000,
         closeButton: true,
       })
@@ -517,8 +612,26 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
       onDataReload?.()
     } catch (error) {
       console.error('Failed to delete endpoint:', error)
+
+      let errorMessage = '未知错误'
+      if (error instanceof AxiosError) {
+        // 检查是否是纯文本错误响应
+        if (typeof error.response?.data === 'string') {
+          errorMessage = error.response.data
+        } else {
+          // 尝试从响应中提取错误信息
+          errorMessage = error.response?.data?.message ||
+            error.response?.data?.error ||
+            error.response?.data?.title ||
+            error.message ||
+            '未知错误'
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+
       toast.error('删除端点失败', {
-        description: (error as Error).message || '未知错误',
+        description: errorMessage,
         duration: 10000,
         closeButton: true,
       })
@@ -558,8 +671,8 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
       <div className='flex flex-col sm:flex-row gap-4'>
         <Input
           placeholder='search by service name...'
-          value={globalFilter ?? ''}
-          onChange={(event) => setGlobalFilter(event.target.value)}
+          value={searchQuery}
+          onChange={(event) => onSearch?.(event.target.value)}
           className='max-w-sm'
         />
       </div>
@@ -574,9 +687,9 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
                       {header.isPlaceholder
                         ? null
                         : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
                     </TableHead>
                   )
                 })}
@@ -584,11 +697,22 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {loading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className='h-24 text-center'
+                >
+                  <div className='flex items-center justify-center space-x-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    <span>加载中...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -617,13 +741,15 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
 
       {/* View Dialog */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent 
+        <DialogContent
           className='max-w-4xl max-h-[90vh] overflow-y-auto'
           style={{ width: '90vw', maxWidth: 'none' }}
         >
           <DialogHeader>
             <DialogTitle>端点详情</DialogTitle>
           </DialogHeader>
+
+          {/* Content - 现在只有在数据准备好后才打开对话框 */}
           {endpointDetail && (
             <div className='space-y-4' style={{ maxWidth: '85vw', width: '85vw' }}>
               <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
@@ -655,8 +781,8 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
                 <h3 className='font-medium mb-3'>方法列表:</h3>
                 <div className='space-y-2 text-xs'>
                   {endpointDetail.api_details?.map((api: any, index: number) => (
-                    <Collapsible 
-                      key={index} 
+                    <Collapsible
+                      key={index}
                       open={openApiDetails[index] || false}
                       onOpenChange={() => toggleApiDetail(index)}
                     >
@@ -677,61 +803,9 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
                         </div>
                       </CollapsibleTrigger>
                       <CollapsibleContent className='p-3 bg-gray-50 dark:bg-[#1f1f23] rounded-md dark:border-[#3a3a3e] text-xs'>
-                        <div className='space-y-2 text-xs'>
-                          <div>
-                            <span className='font-medium text-xs'>路径:</span> <span className="text-xs">{api.path}</span>
-                          </div>
-                          {api.summary && (
-                            <div>
-                              <span className='font-medium text-xs'>摘要:</span> <span className="text-xs">{api.summary}</span>
-                            </div>
-                          )}
-                          {api.description && (
-                            <div>
-                              <span className='font-medium text-xs'>描述:</span> <span className="text-xs">{api.description}</span>
-                            </div>
-                          )}
-                          {api.path_params && api.path_params.length > 0 && (
-                            <div>
-                              <span className='font-medium text-xs'>路径参数:</span>
-                              <ul className='list-disc list-inside ml-4 text-xs'>
-                                {api.path_params.map((param: any, paramIndex: number) => (
-                                  <li key={paramIndex} className="text-xs">
-                                    {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
-                                    {param.description && ` - ${param.description}`}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {api.query_params && api.query_params.length > 0 && (
-                            <div>
-                              <span className='font-medium text-xs'>查询参数:</span>
-                              <ul className='list-disc list-inside ml-4 text-xs'>
-                                {api.query_params.map((param: any, paramIndex: number) => (
-                                  <li key={paramIndex} className="text-xs">
-                                    {param.name} ({param.param_type}) {param.required ? '(必填)' : '(可选)'}
-                                    {param.description && ` - ${param.description}`}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {(api.request_body_schema || api.response_schema) && (
-                            <div className={api.request_body_schema && api.response_schema && Object.keys(api.request_body_schema).length > 0 && Object.keys(api.response_schema).length > 0 ? "grid grid-cols-1 md:grid-cols-2 gap-4" : ""}>
-                              {api.request_body_schema && Object.keys(api.request_body_schema).length > 0 && (
-                                <div>
-                                  <ApiFieldDisplay schema={api.request_body_schema} title="请求体" />
-                                </div>
-                              )}
-                              {api.response_schema && Object.keys(api.response_schema).length > 0 && (
-                                <div>
-                                  <ApiFieldDisplay schema={api.response_schema} title="响应体" />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        {openApiDetails[index] && (
+                          <LazyApiDetails api={api} />
+                        )}
                       </CollapsibleContent>
 
                     </Collapsible>
@@ -753,7 +827,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
                   </Button>
                 </div>
                 <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
-                  {JSON.stringify(endpointDetail.swagger_spec, null, 2)}
+                  {endpointDetail.swagger_spec_string || JSON.stringify(endpointDetail.swagger_spec, null, 2)}
                 </JsonHighlighter>
               </div>
             </div>
@@ -766,14 +840,14 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent 
+        <DialogContent
           className='max-w-4xl max-h-[90vh] overflow-y-auto'
           style={{ width: '90vw', maxWidth: 'none' }}
         >
           <DialogHeader>
             <DialogTitle>编辑端点</DialogTitle>
           </DialogHeader>
-          <div className='space-y-4'>
+          <div className='space-y-4' style={{ maxWidth: '85vw', width: '85vw' }}>
             <div>
               <label className='block text-sm font-medium'>服务名称</label>
               <input
@@ -795,8 +869,9 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
               <label className='block text-sm font-medium'>Swagger接口详情</label>
               <Textarea
                 defaultValue={endpointDetail?.swagger_spec ? JSON.stringify(endpointDetail.swagger_spec, null, 2) : ''}
-                className='mt-1 w-full rounded border p-2 min-h-[400px] max-h-[600px] overflow-y-auto overflow-x-auto font-mono text-sm resize-y whitespace-nowrap'
+                className='mt-1 w-full rounded border p-2 min-h-[400px] max-h-[600px] font-mono text-sm resize-y break-words'
                 placeholder='请输入Swagger JSON内容'
+                rows={200}
               />
             </div>
           </div>
@@ -811,7 +886,7 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
 
       {/* Config Dialog */}
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-        <DialogContent 
+        <DialogContent
           className='max-w-4xl max-h-[90vh] overflow-y-auto'
           style={{ width: '90vw', maxWidth: 'none' }}
         >
@@ -822,29 +897,31 @@ export function EndpointsTable({ data, onDataReload }: DataTableProps) {
             </DialogDescription>
           </DialogHeader>
           {selectedEndpoint && (
-            <Tabs defaultValue="sse" className="w-full">
-              <TabsList>
-                <TabsTrigger value="sse">SSE</TabsTrigger>
-                <TabsTrigger value="streamable">Streamable</TabsTrigger>
-              </TabsList>
-              <TabsContent value="sse" className="mt-4">
-                <div>
-                  <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
-                    {JSON.stringify(generateMcpConfig(selectedEndpoint), null, 2)}
-                  </JsonHighlighter>
+            <div className='space-y-4' style={{ maxWidth: '85vw', width: '85vw' }}>
+              <Tabs defaultValue="sse" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="sse">SSE</TabsTrigger>
+                  <TabsTrigger value="streamable">Streamable</TabsTrigger>
+                </TabsList>
+                <TabsContent value="sse" className="mt-4">
+                  <div>
+                    <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
+                      {JSON.stringify(generateMcpConfig(selectedEndpoint), null, 2)}
+                    </JsonHighlighter>
+                  </div>
+                </TabsContent>
+                <TabsContent value="streamable" className="mt-4">
+                  <div>
+                    <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
+                      {JSON.stringify(generateStreamableConfig(selectedEndpoint), null, 2)}
+                    </JsonHighlighter>
+                  </div>
+                </TabsContent>
+                <div className='mt-4 flex justify-end'>
+                  <Button onClick={() => setIsConfigOpen(false)}>关闭</Button>
                 </div>
-              </TabsContent>
-              <TabsContent value="streamable" className="mt-4">
-                <div>
-                  <JsonHighlighter className="max-h-96 overflow-auto rounded bg-gray-100 dark:bg-[#1f1f23] text-sm border border-gray-200 dark:border-gray-700">
-                    {JSON.stringify(generateStreamableConfig(selectedEndpoint), null, 2)}
-                  </JsonHighlighter>
-                </div>
-              </TabsContent>
-              <div className='mt-4 flex justify-end'>
-                <Button onClick={() => setIsConfigOpen(false)}>关闭</Button>
-              </div>
-            </Tabs>
+              </Tabs>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -894,23 +971,41 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
     );
   }
 
+  // 处理数组类型的schema
+  if (schema.type === 'array' && schema.items) {
+    return (
+      <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-white dark:bg-[#1f1f23]">
+        <span className='font-medium text-xs'>{title}:</span>
+        <div className="mt-1">
+          <div className="mb-2 text-xs text-gray-600 dark:text-gray-400">
+            类型: 数组
+          </div>
+          <div className="ml-4">
+            <span className="text-xs font-medium">数组元素:</span>
+            <ApiFieldDisplay schema={schema.items} title="Item" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 渲染字段信息
   const renderField = (fieldSchema: any, fieldName: string, required: string[] = [], level = 0) => {
     // 获取字段类型
     const type = fieldSchema?.type || 'unknown';
-    
+
     // 获取字段描述
     const description = fieldSchema?.description || '';
-    
+
     // 检查是否为必填字段
     const isRequired = required.includes(fieldName);
-    
+
     // 检查是否有子字段
     const hasProperties = fieldSchema?.properties && Object.keys(fieldSchema.properties).length > 0;
-    
+
     // 检查是否为数组类型且有items
     const isArrayWithItems = type === 'array' && fieldSchema?.items;
-    
+
     return (
       <div key={fieldName} className={`ml-${level * 4}`}>
         {hasProperties ? (
@@ -929,7 +1024,7 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="ml-4 border-l-2 border-gray-200 dark:border-[#3a3a3e] pl-2">
-                {Object.entries(fieldSchema.properties).map(([subFieldName, subFieldSchema]: [string, any]) => 
+                {Object.entries(fieldSchema.properties).map(([subFieldName, subFieldSchema]: [string, any]) =>
                   renderField(subFieldSchema, subFieldName, fieldSchema.required || [], level + 1)
                 )}
               </div>
@@ -956,11 +1051,11 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
                     <span className="font-medium text-xs mr-2">items</span>
                     {fieldSchema.items.type && (
                       <span className={`text-xs mr-2 ${
-                        fieldSchema.items.type === 'string' ? 'text-green-600' : 
-                        fieldSchema.items.type === 'number' || fieldSchema.items.type === 'integer' ? 'text-purple-600' : 
-                        fieldSchema.items.type === 'boolean' ? 'text-yellow-600' : 
-                        fieldSchema.items.type === 'object' ? 'text-primary' : 
-                        'text-gray-600'
+                        fieldSchema.items.type === 'string' ? 'text-green-600' :
+                          fieldSchema.items.type === 'number' || fieldSchema.items.type === 'integer' ? 'text-purple-600' :
+                            fieldSchema.items.type === 'boolean' ? 'text-yellow-600' :
+                              fieldSchema.items.type === 'object' ? 'text-primary' :
+                                'text-gray-600'
                       }`}>
                         {fieldSchema.items.type}
                       </span>
@@ -970,7 +1065,7 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
                 {/* 如果数组项是对象类型，显示其属性 */}
                 {fieldSchema.items.type === 'object' && fieldSchema.items.properties && (
                   <div className="ml-4 border-l-2 border-gray-200 dark:border-[#3a3a3e] pl-2">
-                    {Object.entries(fieldSchema.items.properties).map(([subFieldName, subFieldSchema]: [string, any]) => 
+                    {Object.entries(fieldSchema.items.properties).map(([subFieldName, subFieldSchema]: [string, any]) =>
                       renderField(subFieldSchema, subFieldName, fieldSchema.items.required || [], level + 2)
                     )}
                   </div>
@@ -984,11 +1079,11 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
             <div className="flex items-center">
               <span className="font-medium text-xs mr-2">{fieldName}</span>
               <span className={`text-xs mr-2 ${
-                type === 'string' ? 'text-green-600' : 
-                type === 'number' || type === 'integer' ? 'text-purple-600' : 
-                type === 'boolean' ? 'text-yellow-600' : 
-                type === 'array' ? 'text-red-600' : 
-                'text-gray-600'
+                type === 'string' ? 'text-green-600' :
+                  type === 'number' || type === 'integer' ? 'text-purple-600' :
+                    type === 'boolean' ? 'text-yellow-600' :
+                      type === 'array' ? 'text-red-600' :
+                        'text-gray-600'
               }`}>
                 {type}
               </span>
@@ -1009,7 +1104,7 @@ function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
     <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-white dark:bg-[#1f1f23]">
       <span className='font-medium text-xs'>{title}:</span>
       <div className="mt-1">
-        {Object.entries(properties).map(([fieldName, fieldSchema]: [string, any]) => 
+        {Object.entries(properties).map(([fieldName, fieldSchema]: [string, any]) =>
           renderField(fieldSchema, fieldName, required, 0)
         )}
         {Object.keys(properties).length === 0 && (

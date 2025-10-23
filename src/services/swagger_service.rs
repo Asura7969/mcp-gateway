@@ -33,11 +33,11 @@ impl SwaggerService {
 
         // Check if any paths and methods already exist for this endpoint name
         let existing_endpoint = sqlx::query(
-            "SELECT id, name, swagger_content FROM endpoints WHERE name = ? AND status != 'deleted'"
+            "SELECT id, name, swagger_content FROM endpoints WHERE name = ?"
         )
-        .bind(&request.endpoint_name)
-        .fetch_optional(self.endpoint_service.get_pool())
-        .await?;
+            .bind(&request.endpoint_name)
+            .fetch_optional(self.endpoint_service.get_pool())
+            .await?;
 
         let endpoint_response = if let Some(row) = existing_endpoint {
             // Endpoint exists, check for duplicate paths and methods
@@ -115,7 +115,7 @@ impl SwaggerService {
                             if [
                                 "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE",
                             ]
-                            .contains(&upper_method.as_str())
+                                .contains(&upper_method.as_str())
                             {
                                 if existing_methods.contains_key(&upper_method)
                                     || existing_methods.contains_key(method)
@@ -156,9 +156,9 @@ impl SwaggerService {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::mpsc;
     use super::*;
     use crate::utils::generate_api_details;
+    use tokio::sync::mpsc;
 
     fn create_test_swagger_spec() -> SwaggerSpec {
         serde_json::from_str(
@@ -183,7 +183,7 @@ mod tests {
             }
         }"#,
         )
-        .unwrap()
+            .unwrap()
     }
 
     fn create_optimized_swagger_spec() -> SwaggerSpec {
@@ -333,7 +333,7 @@ mod tests {
   }
 }"###,
         )
-        .unwrap()
+            .unwrap()
     }
 
     fn create_no_params_swagger_spec() -> SwaggerSpec {
@@ -379,7 +379,7 @@ mod tests {
   }
 }"###,
         )
-        .unwrap()
+            .unwrap()
     }
 
     fn create_array_type_swagger_spec() -> SwaggerSpec {
@@ -560,7 +560,7 @@ mod tests {
   }
 }"###,
         )
-        .unwrap()
+            .unwrap()
     }
 
     #[tokio::test]

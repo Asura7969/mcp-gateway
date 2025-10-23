@@ -1,6 +1,7 @@
 use crate::models::{
     CreateEndpointRequest, EndpointDetailResponse, EndpointMetrics, EndpointQueryParams,
-    EndpointResponse, PaginatedEndpointsResponse, PaginationInfo, UpdateEndpointRequest,
+    EndpointResponse, PaginatedEndpointsResponse, PaginationInfo, SwaggerSpec,
+    UpdateEndpointRequest,
 };
 use crate::state::AppState;
 use axum::{
@@ -10,10 +11,44 @@ use axum::{
 };
 use uuid::Uuid;
 
+/// 校验 Swagger 规范中的 servers 字段
+fn validate_swagger_servers(swagger_content: &str) -> Result<(), String> {
+    // 尝试解析为 JSON
+    let swagger_spec: SwaggerSpec = if let Ok(spec) = serde_json::from_str(swagger_content) {
+        spec
+    } else {
+        // 如果 JSON 解析失败，尝试解析为 YAML
+        serde_yaml::from_str(swagger_content)
+            .map_err(|e| format!("无法解析 Swagger 规范: {}", e))?
+    };
+
+    // 检查 servers 字段
+    match &swagger_spec.servers {
+        None => {
+            return Err("Swagger 规范中必须包含 servers 字段".to_string());
+        }
+        Some(servers) => {
+            if servers.is_empty() {
+                return Err("Swagger 规范中的 servers 数组不能为空".to_string());
+            }
+            if servers.len() > 1 {
+                return Err("Swagger 规范中的 servers 数组只能包含一个元素".to_string());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn create_endpoint(
     State(app_state): State<AppState>,
     Json(request): Json<CreateEndpointRequest>,
 ) -> Result<(StatusCode, Json<EndpointResponse>), (StatusCode, String)> {
+    // 校验 Swagger servers 字段
+    if let Err(error_msg) = validate_swagger_servers(&request.swagger_content) {
+        return Err((StatusCode::BAD_REQUEST, error_msg));
+    }
+
     match app_state.endpoint_service.create_endpoint(request).await {
         Ok(endpoint) => Ok((StatusCode::CREATED, Json(endpoint))),
         Err(e) => {
@@ -91,6 +126,13 @@ pub async fn update_endpoint(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateEndpointRequest>,
 ) -> Result<Json<EndpointResponse>, (StatusCode, String)> {
+    // 如果提供了 swagger_content，则校验 servers 字段
+    if let Some(ref swagger_content) = request.swagger_content {
+        if let Err(error_msg) = validate_swagger_servers(swagger_content) {
+            return Err((StatusCode::BAD_REQUEST, error_msg));
+        }
+    }
+
     match app_state
         .endpoint_service
         .update_endpoint(id, request)
@@ -188,14 +230,15 @@ pub async fn stop_endpoint(
     }
 }
 
-pub async fn sync_endpoint_vector(State(app_state): State<AppState>,
-                                     Path(name): Path<String>,
+pub async fn sync_endpoint_vector(
+    State(app_state): State<AppState>,
+    Path(name): Path<String>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     match app_state.endpoint_service.sync_endpoint_vector(name).await {
         Ok(_) => Ok(StatusCode::OK),
         Err(e) => Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "Endpoint listener maybe stopped".to_string(),
-        ))
+        )),
     }
 }
