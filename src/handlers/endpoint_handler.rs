@@ -236,7 +236,7 @@ pub async fn sync_endpoint_vector(
 ) -> Result<StatusCode, (StatusCode, String)> {
     match app_state.endpoint_service.sync_endpoint_vector(name).await {
         Ok(_) => Ok(StatusCode::OK),
-        Err(e) => Err((
+        Err(_e) => Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "Endpoint listener maybe stopped".to_string(),
         )),

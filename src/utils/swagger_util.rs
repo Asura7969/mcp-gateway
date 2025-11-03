@@ -181,10 +181,16 @@ pub fn create_mcp_tool(
         if !desc.is_empty() {
             desc
         } else {
-            operation.summary.clone().unwrap_or_else(|| format!("{} API for {}", method, path))
+            operation
+                .summary
+                .clone()
+                .unwrap_or_else(|| format!("{} API for {}", method, path))
         }
     } else {
-        operation.summary.clone().unwrap_or_else(|| format!("{} API for {}", method, path))
+        operation
+            .summary
+            .clone()
+            .unwrap_or_else(|| format!("{} API for {}", method, path))
     };
 
     // let description = operation
@@ -343,7 +349,10 @@ fn schema_to_json_schema_with_context(
     // Prevent infinite recursion by limiting depth
     const MAX_DEPTH: usize = 50;
     if depth > MAX_DEPTH {
-        tracing::warn!("Schema parsing depth limit reached ({}), returning simplified schema", MAX_DEPTH);
+        tracing::warn!(
+            "Schema parsing depth limit reached ({}), returning simplified schema",
+            MAX_DEPTH
+        );
         return Ok(serde_json::json!({
             "type": "object",
             "description": "Schema too deep - simplified to prevent stack overflow"
@@ -385,7 +394,7 @@ fn schema_to_json_schema_with_context(
                             spec,
                             visited_refs,
                             ref_cache,
-                            depth + 1
+                            depth + 1,
                         );
 
                         // Remove from visited set after processing
@@ -429,16 +438,29 @@ fn schema_to_json_schema_with_context(
     if let Some(properties) = &schema.properties {
         let mut props = serde_json::Map::new();
         for (key, prop_schema) in properties {
-            match schema_to_json_schema_with_context(prop_schema, spec, visited_refs, ref_cache, depth + 1) {
+            match schema_to_json_schema_with_context(
+                prop_schema,
+                spec,
+                visited_refs,
+                ref_cache,
+                depth + 1,
+            ) {
                 Ok(prop_json) => {
                     props.insert(key.clone(), prop_json);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to process property '{}': {}, using fallback", key, e);
-                    props.insert(key.clone(), serde_json::json!({
-                        "type": "string",
-                        "description": format!("Property processing failed: {}", e)
-                    }));
+                    tracing::warn!(
+                        "Failed to process property '{}': {}, using fallback",
+                        key,
+                        e
+                    );
+                    props.insert(
+                        key.clone(),
+                        serde_json::json!({
+                            "type": "string",
+                            "description": format!("Property processing failed: {}", e)
+                        }),
+                    );
                 }
             }
         }
@@ -452,10 +474,13 @@ fn schema_to_json_schema_with_context(
             }
             Err(e) => {
                 tracing::warn!("Failed to process array items: {}, using fallback", e);
-                json_schema.insert("items".to_string(), serde_json::json!({
-                    "type": "string",
-                    "description": format!("Items processing failed: {}", e)
-                }));
+                json_schema.insert(
+                    "items".to_string(),
+                    serde_json::json!({
+                        "type": "string",
+                        "description": format!("Items processing failed: {}", e)
+                    }),
+                );
             }
         }
     }
@@ -479,10 +504,10 @@ pub async fn update_metrics(pool: &DbPool, endpoint_id: Uuid, success: bool) -> 
              error_count = error_count + ?
              WHERE endpoint_id = ?",
     )
-        .bind(error_increment)
-        .bind(endpoint_id.to_string())
-        .execute(pool)
-        .await?;
+    .bind(error_increment)
+    .bind(endpoint_id.to_string())
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

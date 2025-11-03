@@ -31,6 +31,7 @@ import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedSearchIndexRouteImport } from './routes/_authenticated/search/index'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedEndpointsIndexRouteImport } from './routes/_authenticated/endpoints/index'
+import { Route as AuthenticatedDatasetsIndexRouteImport } from './routes/_authenticated/datasets/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
@@ -41,6 +42,10 @@ import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedDatasetsCreateRouteImport } from './routes/_authenticated/datasets/create'
+import { Route as AuthenticatedDatasetsDatasetIdViewRouteImport } from './routes/_authenticated/datasets/$datasetId/view'
+import { Route as AuthenticatedDatasetsDatasetIdHitRouteImport } from './routes/_authenticated/datasets/$datasetId/hit'
+import { Route as AuthenticatedDatasetsDatasetIdEditRouteImport } from './routes/_authenticated/datasets/$datasetId/edit'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -154,6 +159,12 @@ const AuthenticatedEndpointsIndexRoute =
     path: '/endpoints/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDatasetsIndexRoute =
+  AuthenticatedDatasetsIndexRouteImport.update({
+    id: '/datasets/',
+    path: '/datasets/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
   id: '/chats/',
   path: '/chats/',
@@ -210,6 +221,30 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDatasetsCreateRoute =
+  AuthenticatedDatasetsCreateRouteImport.update({
+    id: '/datasets/create',
+    path: '/datasets/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDatasetsDatasetIdViewRoute =
+  AuthenticatedDatasetsDatasetIdViewRouteImport.update({
+    id: '/datasets/$datasetId/view',
+    path: '/datasets/$datasetId/view',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDatasetsDatasetIdHitRoute =
+  AuthenticatedDatasetsDatasetIdHitRouteImport.update({
+    id: '/datasets/$datasetId/hit',
+    path: '/datasets/$datasetId/hit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDatasetsDatasetIdEditRoute =
+  AuthenticatedDatasetsDatasetIdEditRouteImport.update({
+    id: '/datasets/$datasetId/edit',
+    path: '/datasets/$datasetId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -226,6 +261,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/datasets/create': typeof AuthenticatedDatasetsCreateRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -236,12 +272,16 @@ export interface FileRoutesByFullPath {
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
+  '/datasets': typeof AuthenticatedDatasetsIndexRoute
   '/endpoints': typeof AuthenticatedEndpointsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/datasets/$datasetId/edit': typeof AuthenticatedDatasetsDatasetIdEditRoute
+  '/datasets/$datasetId/hit': typeof AuthenticatedDatasetsDatasetIdHitRoute
+  '/datasets/$datasetId/view': typeof AuthenticatedDatasetsDatasetIdViewRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -256,6 +296,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/datasets/create': typeof AuthenticatedDatasetsCreateRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -266,12 +307,16 @@ export interface FileRoutesByTo {
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
+  '/datasets': typeof AuthenticatedDatasetsIndexRoute
   '/endpoints': typeof AuthenticatedEndpointsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/search': typeof AuthenticatedSearchIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/datasets/$datasetId/edit': typeof AuthenticatedDatasetsDatasetIdEditRoute
+  '/datasets/$datasetId/hit': typeof AuthenticatedDatasetsDatasetIdHitRoute
+  '/datasets/$datasetId/view': typeof AuthenticatedDatasetsDatasetIdViewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -291,6 +336,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/datasets/create': typeof AuthenticatedDatasetsCreateRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -301,12 +347,16 @@ export interface FileRoutesById {
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
+  '/_authenticated/datasets/': typeof AuthenticatedDatasetsIndexRoute
   '/_authenticated/endpoints/': typeof AuthenticatedEndpointsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/search/': typeof AuthenticatedSearchIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/datasets/$datasetId/edit': typeof AuthenticatedDatasetsDatasetIdEditRoute
+  '/_authenticated/datasets/$datasetId/hit': typeof AuthenticatedDatasetsDatasetIdHitRoute
+  '/_authenticated/datasets/$datasetId/view': typeof AuthenticatedDatasetsDatasetIdViewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -325,6 +375,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
+    | '/datasets/create'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -335,12 +386,16 @@ export interface FileRouteTypes {
     | '/clerk/user-management'
     | '/apps'
     | '/chats'
+    | '/datasets'
     | '/endpoints'
     | '/help-center'
     | '/search'
     | '/settings/'
     | '/tasks'
     | '/users'
+    | '/datasets/$datasetId/edit'
+    | '/datasets/$datasetId/hit'
+    | '/datasets/$datasetId/view'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -355,6 +410,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
+    | '/datasets/create'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -365,12 +421,16 @@ export interface FileRouteTypes {
     | '/clerk/user-management'
     | '/apps'
     | '/chats'
+    | '/datasets'
     | '/endpoints'
     | '/help-center'
     | '/search'
     | '/settings'
     | '/tasks'
     | '/users'
+    | '/datasets/$datasetId/edit'
+    | '/datasets/$datasetId/hit'
+    | '/datasets/$datasetId/view'
   id:
     | '__root__'
     | '/_authenticated'
@@ -389,6 +449,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/'
+    | '/_authenticated/datasets/create'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -399,12 +460,16 @@ export interface FileRouteTypes {
     | '/clerk/_authenticated/user-management'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
+    | '/_authenticated/datasets/'
     | '/_authenticated/endpoints/'
     | '/_authenticated/help-center/'
     | '/_authenticated/search/'
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/_authenticated/datasets/$datasetId/edit'
+    | '/_authenticated/datasets/$datasetId/hit'
+    | '/_authenticated/datasets/$datasetId/view'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -578,6 +643,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEndpointsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/datasets/': {
+      id: '/_authenticated/datasets/'
+      path: '/datasets'
+      fullPath: '/datasets'
+      preLoaderRoute: typeof AuthenticatedDatasetsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chats/': {
       id: '/_authenticated/chats/'
       path: '/chats'
@@ -648,6 +720,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/datasets/create': {
+      id: '/_authenticated/datasets/create'
+      path: '/datasets/create'
+      fullPath: '/datasets/create'
+      preLoaderRoute: typeof AuthenticatedDatasetsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/datasets/$datasetId/view': {
+      id: '/_authenticated/datasets/$datasetId/view'
+      path: '/datasets/$datasetId/view'
+      fullPath: '/datasets/$datasetId/view'
+      preLoaderRoute: typeof AuthenticatedDatasetsDatasetIdViewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/datasets/$datasetId/hit': {
+      id: '/_authenticated/datasets/$datasetId/hit'
+      path: '/datasets/$datasetId/hit'
+      fullPath: '/datasets/$datasetId/hit'
+      preLoaderRoute: typeof AuthenticatedDatasetsDatasetIdHitRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/datasets/$datasetId/edit': {
+      id: '/_authenticated/datasets/$datasetId/edit'
+      path: '/datasets/$datasetId/edit'
+      fullPath: '/datasets/$datasetId/edit'
+      preLoaderRoute: typeof AuthenticatedDatasetsDatasetIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -677,27 +777,40 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedDatasetsCreateRoute: typeof AuthenticatedDatasetsCreateRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
+  AuthenticatedDatasetsIndexRoute: typeof AuthenticatedDatasetsIndexRoute
   AuthenticatedEndpointsIndexRoute: typeof AuthenticatedEndpointsIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedSearchIndexRoute: typeof AuthenticatedSearchIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedDatasetsDatasetIdEditRoute: typeof AuthenticatedDatasetsDatasetIdEditRoute
+  AuthenticatedDatasetsDatasetIdHitRoute: typeof AuthenticatedDatasetsDatasetIdHitRoute
+  AuthenticatedDatasetsDatasetIdViewRoute: typeof AuthenticatedDatasetsDatasetIdViewRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedDatasetsCreateRoute: AuthenticatedDatasetsCreateRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
+  AuthenticatedDatasetsIndexRoute: AuthenticatedDatasetsIndexRoute,
   AuthenticatedEndpointsIndexRoute: AuthenticatedEndpointsIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedSearchIndexRoute: AuthenticatedSearchIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedDatasetsDatasetIdEditRoute:
+    AuthenticatedDatasetsDatasetIdEditRoute,
+  AuthenticatedDatasetsDatasetIdHitRoute:
+    AuthenticatedDatasetsDatasetIdHitRoute,
+  AuthenticatedDatasetsDatasetIdViewRoute:
+    AuthenticatedDatasetsDatasetIdViewRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

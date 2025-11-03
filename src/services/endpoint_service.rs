@@ -264,7 +264,7 @@ impl EndpointService {
         }
 
         // Build WHERE clause
-        let (where_clause, count_query, query) = if where_conditions.is_empty() {
+        let (_where_clause, count_query, query) = if where_conditions.is_empty() {
             (
                 String::new(),
                 "SELECT COUNT(*) as total FROM endpoints".to_string(),
@@ -667,8 +667,8 @@ mod tests {
             name: "Merge Test Endpoint".to_string(),
             description: Some("First endpoint".to_string()),
             swagger_content:
-            r#"{"openapi":"3.0.0", "paths": {"/test1": {"get": {"summary": "Test 1"}}}}"#
-                .to_string(),
+                r#"{"openapi":"3.0.0", "paths": {"/test1": {"get": {"summary": "Test 1"}}}}"#
+                    .to_string(),
         };
 
         let result1 = service.create_endpoint(request1).await;
@@ -680,8 +680,8 @@ mod tests {
             name: "Merge Test Endpoint".to_string(),
             description: Some("Second endpoint".to_string()),
             swagger_content:
-            r#"{"openapi":"3.0.0", "paths": {"/test2": {"post": {"summary": "Test 2"}}}}"#
-                .to_string(),
+                r#"{"openapi":"3.0.0", "paths": {"/test2": {"post": {"summary": "Test 2"}}}}"#
+                    .to_string(),
         };
 
         let result2 = service.create_endpoint(request2).await;

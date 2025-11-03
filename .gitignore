@@ -47,6 +47,10 @@ monitoring/data/
 # Config files with secrets
 config/local.*
 config/production.*
-config/development.toml
+config/dev.toml
 
 docker/volumes/*
+
+# Local upload directories (ignored)
+uploads/
+storage/uploads/

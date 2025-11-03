@@ -12,6 +12,7 @@ import {
   UserX,
   Plug,
   Search,
+  Table,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -40,6 +41,11 @@ export const sidebarData: SidebarData = {
           title: 'Search',
           url: '/search',
           icon: Search,
+        },
+        {
+          title: 'Datasets',
+          url: '/datasets',
+          icon: Table,
         },
         {
           title: 'Monitoring',

@@ -8,6 +8,7 @@ pub struct Settings {
     pub database: DatabaseConfig,
     pub embedding: EmbeddingConfig,
     pub logging: LoggingConfig,
+    pub storage: Option<StorageConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -163,6 +164,35 @@ impl Default for Settings {
                 file_path: "logs/mcp-gateway.log".to_string(),
                 console_output: true,
             },
+            storage: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StorageConfig {
+    pub provider: StorageProvider,
+    pub oss: Option<AliyunOssConfig>,
+    pub local: Option<LocalStorageConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageProvider {
+    Oss,
+    Local,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AliyunOssConfig {
+    pub endpoint: String,
+    pub bucket: String,
+    pub access_key_id: String,
+    pub access_key_secret: String,
+    pub root: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocalStorageConfig {
+    pub root: String,
 }

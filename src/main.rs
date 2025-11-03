@@ -18,25 +18,27 @@ use rmcp::transport::sse_server::{
     post_event_handler, sse_handler, App, ConnectionMsg, SseServerConfig,
 };
 use rmcp::transport::{SseServer, StreamableHttpServerConfig, StreamableHttpService};
+use std::fs;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::Duration;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, fmt, EnvFilter};
-use std::fs;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::middleware::stream_requests_interceptor;
 use crate::models::DB_POOL;
 use crate::routes::*;
-use crate::services::{EmbeddingService, EndpointListener, McpService, SessionService};
+use crate::services::{
+    EmbeddingService, EndpointListener, FileService, McpService, SessionService, TableRagService,
+};
 use crate::utils::MonitoredSessionManager;
 use config::Settings;
 use handlers::*;
-use middleware::{cors_layer, logging};
+use middleware::cors_layer;
 use models::create_pool;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-use tokio::sync::mpsc;
 use services::{EndpointService, SwaggerService};
 use state::AppState;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tower::ServiceBuilder;
 use utils::shutdown_signal;
@@ -69,16 +71,15 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database connection pool created");
     let db_pool = Arc::new(pool);
 
-
     let (tx, rx) = mpsc::channel(100);
-    
+
     // Create services
     let endpoint_service = Arc::new(EndpointService::new((*db_pool).clone(), tx.clone()));
     let swagger_service = Arc::new(SwaggerService::new((*endpoint_service).clone()));
     let mcp_service = Arc::new(McpService::new((*db_pool).clone()));
 
     // Initialize EmbeddingService
-    let embedding_config = settings.embedding;
+    let embedding_config = settings.embedding.clone();
     let embedding_service = Arc::new(EmbeddingService::from_config(embedding_config.clone())?);
     tracing::info!("EmbeddingService initialized");
 
@@ -94,7 +95,29 @@ async fn main() -> anyhow::Result<()> {
     let retrieval_service = interface_retrieval_state.retrieval.clone();
     let endpoint_listener = EndpointListener::new(retrieval_service, endpoint_service.clone(), tx);
     EndpointListener::run(endpoint_listener, rx);
-    
+    // Create File upload state (must be before TableRag to inject dependency)
+    let file_service = Arc::new(FileService::new(
+        (*db_pool).clone(),
+        settings.storage.clone(),
+    )?);
+    let file_state = handlers::FileState {
+        service: file_service.clone(),
+    };
+
+    // Create Table RAG state
+    let table_rag_service = Arc::new(
+        TableRagService::new(
+            &settings.embedding,
+            embedding_service.clone(),
+            (*db_pool).clone(),
+            file_service.clone(),
+        )
+        .await?,
+    );
+    let table_rag_state = handlers::TableRagState {
+        service: table_rag_service.clone(),
+    };
+
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
 
     let config = SseServerConfig {
@@ -159,6 +182,10 @@ async fn main() -> anyhow::Result<()> {
         .merge(create_connection_routes())
         // Interface relation routes
         .merge(create_interface_relation_routes().with_state(interface_retrieval_state))
+        // Table RAG routes
+        .merge(create_table_rag_routes().with_state(table_rag_state))
+        // File routes
+        .merge(create_file_routes().with_state(file_state))
         .route(
             "/{endpoint_id}/sse",
             get(sse_handler).with_state(merge_state.clone()),
@@ -171,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(
             ServiceBuilder::new()
                 .layer(cors_layer())
-                .layer(axum::middleware::from_fn(logging::log_requests))
+                // .layer(axum::middleware::from_fn(logging::log_requests))
                 .layer(axum::middleware::from_fn_with_state(
                     app_state,
                     stream_requests_interceptor,
@@ -235,7 +262,7 @@ fn session_counter(
 
 fn setup_logging(logging_config: &config::LoggingConfig) -> anyhow::Result<()> {
     use std::path::Path;
-    
+
     // Create log directory if it doesn't exist
     let log_path = Path::new(&logging_config.file_path);
     let parent_dir = log_path.parent().unwrap_or_else(|| Path::new("."));
@@ -244,18 +271,19 @@ fn setup_logging(logging_config: &config::LoggingConfig) -> anyhow::Result<()> {
     // Create file appender for log file
     let file_appender = tracing_appender::rolling::daily(
         parent_dir,
-        log_path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("app.log"))
+        log_path
+            .file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new("app.log")),
     );
 
     // Set up the log level filter
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            let default_filter = format!(
-                "mcp_gateway={},tower_http={},axum::rejection=trace",
-                logging_config.level, logging_config.level
-            );
-            EnvFilter::new(default_filter)
-        });
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let default_filter = format!(
+            "mcp_gateway={},tower_http={},axum::rejection=trace",
+            logging_config.level, logging_config.level
+        );
+        EnvFilter::new(default_filter)
+    });
 
     let registry = tracing_subscriber::registry().with(env_filter);
 
