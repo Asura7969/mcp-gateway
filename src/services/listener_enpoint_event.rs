@@ -24,39 +24,40 @@ impl EndpointListener {
     pub fn new(
         retrieval: Arc<InterfaceRetrievalService>,
         endpoint_service: Arc<EndpointService>,
-        update_sender: mpsc::Sender<EndpointEvent>
+        update_sender: mpsc::Sender<EndpointEvent>,
     ) -> EndpointListener {
         Self {
             retrieval,
             endpoint_service,
             update_sender,
-
         }
     }
 
-    pub async fn find_endpoint_to_spr(&self, project_id: &ProjectId) -> Option<SwaggerParseRequest> {
-        match self.endpoint_service.get_endpoint_by_name(project_id.to_string()).await {
+    pub async fn find_endpoint_to_spr(
+        &self,
+        project_id: &ProjectId,
+    ) -> Option<SwaggerParseRequest> {
+        match self
+            .endpoint_service
+            .get_endpoint_by_name(project_id.to_string())
+            .await
+        {
             Ok(endpoint) => {
-                match serde_json::from_str::<serde_json::Value>(
-                    &endpoint.swagger_content,
-                ) {
-                    Ok(swagger_json) => {
-                        Some(SwaggerParseRequest {
-                            project_id: endpoint.name.clone(),
-                            swagger_json,
-                            version: Some("1.0.0".to_string()),
-                            generate_embeddings: Some(true),
-                        })
-                    }
-                    Err(_) => None
+                match serde_json::from_str::<serde_json::Value>(&endpoint.swagger_content) {
+                    Ok(swagger_json) => Some(SwaggerParseRequest {
+                        project_id: endpoint.name.clone(),
+                        swagger_json,
+                        version: Some("1.0.0".to_string()),
+                        generate_embeddings: Some(true),
+                    }),
+                    Err(_) => None,
                 }
             }
-            Err(_) => None
+            Err(_) => None,
         }
     }
 
-    pub fn run(self,
-               mut receive: mpsc::Receiver<EndpointEvent>) {
+    pub fn run(self, mut receive: mpsc::Receiver<EndpointEvent>) {
         tokio::task::spawn(async move {
             loop {
                 match receive.recv().await {
@@ -69,7 +70,10 @@ impl EndpointListener {
                                         info!("Successfully re-parsed and stored swagger data for endpoint: {}", project_id);
                                     }
                                     Err(e) => {
-                                        error!("Failed to re-parse swagger data for endpoint {}: {}", project_id, e);
+                                        error!(
+                                            "Failed to re-parse swagger data for endpoint {}: {}",
+                                            project_id, e
+                                        );
                                     }
                                 }
                             }
@@ -83,8 +87,14 @@ impl EndpointListener {
                         info!("delete project: {:?}, result: {:?}", project_id, d);
                     }
                     Some(EndpointEvent::UPDATE(project_id)) => {
-                        self.update_sender.send(EndpointEvent::DELETE(project_id.clone())).await.unwrap();
-                        self.update_sender.send(EndpointEvent::Created(project_id)).await.unwrap();
+                        self.update_sender
+                            .send(EndpointEvent::DELETE(project_id.clone()))
+                            .await
+                            .unwrap();
+                        self.update_sender
+                            .send(EndpointEvent::Created(project_id))
+                            .await
+                            .unwrap();
                     }
                     None => {}
                 }

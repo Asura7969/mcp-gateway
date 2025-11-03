@@ -1,6 +1,7 @@
 pub mod elastic_search;
 pub mod embedding_service;
 pub mod endpoint_service;
+pub mod file_service;
 pub mod interface_retrieval_service;
 mod listener_enpoint_event;
 pub mod mcp_service;
@@ -8,13 +9,16 @@ pub mod pgvectorrs_search;
 pub mod search;
 mod session_service;
 pub mod swagger_service;
+pub mod table_rag_service;
 
 pub use elastic_search::*;
 pub use embedding_service::EmbeddingService;
 pub use endpoint_service::*;
+pub use file_service::FileService;
+pub use listener_enpoint_event::*;
 pub use mcp_service::McpService;
 pub use pgvectorrs_search::*;
 pub use search::*;
 pub use session_service::*;
 pub use swagger_service::*;
-pub use listener_enpoint_event::*;
+pub use table_rag_service::*;

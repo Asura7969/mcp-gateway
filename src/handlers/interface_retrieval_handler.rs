@@ -37,14 +37,9 @@ impl InterfaceRetrievalState {
         embedding_service: Arc<EmbeddingService>,
         db_pool: DbPool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let service = Arc::new(
-            InterfaceRetrievalService::new(
-                &embedding_config,
-                embedding_service,
-            )
-            .await?,
-        );
-        Ok(Self { 
+        let service =
+            Arc::new(InterfaceRetrievalService::new(&embedding_config, embedding_service).await?);
+        Ok(Self {
             retrieval: service,
             db_pool,
         })
@@ -71,7 +66,7 @@ pub async fn get_projects(
     State(state): State<InterfaceRetrievalState>,
 ) -> Result<Json<Vec<ProjectInfo>>, StatusCode> {
     let query = "SELECT DISTINCT name, name as id, 'active' as status FROM endpoints ORDER BY name";
-    
+
     match sqlx::query_as::<_, (String, String, String)>(query)
         .fetch_all(&state.db_pool)
         .await
@@ -103,7 +98,10 @@ pub async fn delete_project_data(
     match state.retrieval.delete_project_data(&project_id).await {
         Ok(_) => {
             let mut response = HashMap::new();
-            response.insert("message".to_string(), "Project data deleted successfully".to_string());
+            response.insert(
+                "message".to_string(),
+                "Project data deleted successfully".to_string(),
+            );
             Ok(Json(response))
         }
         Err(e) => {
