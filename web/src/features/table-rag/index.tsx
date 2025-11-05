@@ -28,6 +28,16 @@ import {
 import { Database, Search as SearchIcon, Plus, FileText, Image as ImageIcon, Eye, MoreHorizontal, Copy } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { cn, getPageNumbers } from '@/lib/utils'
+import { useReactTable, getCoreRowModel, getPaginationRowModel } from '@tanstack/react-table'
+import { DataTablePagination } from '@/components/data-table/pagination'
 
 export function TableRagPage() {
   const navigate = useNavigate()
@@ -35,7 +45,8 @@ export function TableRagPage() {
   const [loadingDatasets, setLoadingDatasets] = useState(false)
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null)
   const [page, setPage] = useState<number>(1)
-  const [pageSize, setPageSize] = useState<number>(8)
+  const [pageSize, setPageSize] = useState<number>(20)
+  const [total, setTotal] = useState<number>(0)
   const [hasNextPage, setHasNextPage] = useState<boolean>(false)
 
   const [creating, setCreating] = useState(false)
@@ -62,8 +73,40 @@ export function TableRagPage() {
   const [maxResults, setMaxResults] = useState<number>(10)
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<EsHit[]>([])
-  const [total, setTotal] = useState<number>(0)
   const [activeTab, setActiveTab] = useState<'all' | 'doc' | 'data' | 'image'>('all')
+
+  // 创建表格实例用于 DataTablePagination
+  const table = useReactTable({
+    data: datasets,
+    columns: [],
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    state: {
+      pagination: {
+        pageIndex: page - 1,
+        pageSize: pageSize,
+      },
+    },
+    pageCount: Math.ceil(total / pageSize),
+    manualPagination: true,
+    onPaginationChange: (updater) => {
+      const newPagination = typeof updater === 'function' 
+        ? updater(table.getState().pagination) 
+        : updater
+      
+      // 更新页面大小
+      if (newPagination.pageSize !== pageSize) {
+        setPageSize(newPagination.pageSize)
+        // 当页面大小改变时，重置到第一页
+        setPage(1)
+      }
+      
+      // 更新页面索引
+      if (newPagination.pageIndex + 1 !== page) {
+        setPage(newPagination.pageIndex + 1)
+      }
+    },
+  })
   const [createOpen, setCreateOpen] = useState(false)
   // 移除任务列表相关状态
   // const [tasksOpen, setTasksOpen] = useState(false)
@@ -74,14 +117,15 @@ export function TableRagPage() {
   const loadDatasets = async (p: number = page, ps: number = pageSize) => {
     try {
       setLoadingDatasets(true)
-      const list = await TableRagApiService.listDatasets(p, ps)
-      setDatasets(list)
-      setHasNextPage(list.length === ps)
-      if (list.length > 0 && !selectedDatasetId) {
-        setSelectedDatasetId(list[0].id)
+      const response = await TableRagApiService.listDatasets(p, ps)
+      setDatasets(response.datasets)
+      setTotal(response.pagination.total)
+      setHasNextPage(response.pagination.page < response.pagination.total_pages)
+      if (response.datasets.length > 0 && !selectedDatasetId) {
+        setSelectedDatasetId(response.datasets[0].id)
       }
       // 开发模式下无数据时，注入一条本地Mock，便于预览样式
-      if (list.length === 0 && import.meta.env.DEV) {
+      if (response.datasets.length === 0 && import.meta.env.DEV) {
         const mock: DatasetResponse = {
           id: 'mock_kb_001',
           name: '表数据知识库',
@@ -505,45 +549,10 @@ export function TableRagPage() {
         </Tabs>
         </div>
 
-        {/* 底部粘性分页栏：与编辑页保持一致布局 */}
+        {/* 底部粘性分页栏：使用 DataTablePagination 组件 */}
         <div className='sticky bottom-0 z-40 border-t bg-background/80 backdrop-blur supports-[-webkit-backdrop-filter]:bg-background/60 supports-[backdrop-filter]:bg-background/60'>
-          <div className='flex items-center justify-end gap-3 pt-2 pb-1'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>每页</span>
-              <select
-                className='h-9 border rounded-md px-2 bg-transparent'
-                value={pageSize}
-                onChange={(e) => {
-                  const v = Number(e.target.value)
-                  setPageSize(v)
-                  setPage(1)
-                }}
-              >
-                {[8, 12, 16, 20].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-            <Button
-              variant='outline'
-              onClick={() => {
-                const next = Math.max(1, page - 1)
-                if (next !== page) setPage(next)
-              }}
-              disabled={page <= 1 || loadingDatasets}
-            >上一页</Button>
-            <span className='text-sm text-muted-foreground'>第 {page} 页</span>
-            <Button
-              variant='outline'
-              onClick={() => {
-                const nextPage = page + 1
-                setPage(nextPage)
-                if (!hasNextPage) {
-                  toast.info('可能已到最后一页')
-                }
-              }}
-              disabled={loadingDatasets}
-            >下一页</Button>
+          <div className='p-1'>
+            <DataTablePagination table={table} />
           </div>
         </div>
 

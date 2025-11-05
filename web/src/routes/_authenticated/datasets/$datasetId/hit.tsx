@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import { TableRagApiService } from '@/features/table-rag/data/api'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
-export function DatasetHitTestPage() {
+function DatasetHitTestPage() {
   const { datasetId } = Route.useParams()
   const [threshold, setThreshold] = useState<number[]>([0.3])
   const [maxResults, setMaxResults] = useState<number[]>([10])

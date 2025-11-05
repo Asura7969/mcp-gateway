@@ -6,14 +6,18 @@ import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { TableRagApiService } from '@/features/table-rag/data/api'
+import type { TableSearchPagedRequest, EsSearchPagedResponse } from '@/features/table-rag/data/schema'
+import { DataTablePagination } from '@/components/data-table/pagination'
 import { Eye } from 'lucide-react'
+import { useReactTable, getCoreRowModel, getPaginationRowModel } from '@tanstack/react-table'
 
-export function DatasetDetailPage() {
+function DatasetDetailPage() {
   const { datasetId } = Route.useParams()
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<import('@/features/table-rag/data/schema').EsHit[]>([])
@@ -24,7 +28,7 @@ export function DatasetDetailPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detail, setDetail] = useState<import('@/features/table-rag/data/schema').DatasetDetailResponse | null>(null)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   // 任务列表相关状态
   const [tasksOpen, setTasksOpen] = useState(false)
   const [tasksLoading, setTasksLoading] = useState(false)
@@ -33,7 +37,7 @@ export function DatasetDetailPage() {
   const [taskDot, setTaskDot] = useState<'green' | 'yellow' | 'red' | 'gray'>('gray')
   const [latestUpdate, setLatestUpdate] = useState<string | null>(null)
 
-  // 默认取前20条，不分页
+  // 分页加载数据
   useEffect(() => {
     const key = datasetId || ''
     if (!key) {
@@ -45,13 +49,14 @@ export function DatasetDetailPage() {
     isFetchingRef.current = true
     lastKeyRef.current = key
 
-    const fetchTop = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true)
-        const res = await TableRagApiService.search({
+        const res = await TableRagApiService.searchPaged({
           dataset_id: key,
-          query: '全部',
-          max_results: 20,
+          query: '',
+          page: page,
+          page_size: pageSize,
         })
         const hits = res.hits?.hits || []
         setResults(hits)
@@ -65,8 +70,8 @@ export function DatasetDetailPage() {
         isFetchingRef.current = false
       }
     }
-    fetchTop()
-  }, [datasetId])
+    fetchData()
+  }, [datasetId, page, pageSize])
 
   // 加载数据集详情用于展示表名
   useEffect(() => {
@@ -151,6 +156,40 @@ export function DatasetDetailPage() {
     return Array.from(set)
   }, [results])
 
+  // 创建表格数据适配器
+  const tableData = useMemo(() => results, [results])
+  const table = useReactTable({
+    data: tableData,
+    columns: [],
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    state: {
+      pagination: {
+        pageIndex: page - 1,
+        pageSize: pageSize,
+      },
+    },
+    pageCount: Math.ceil(total / pageSize),
+    manualPagination: true,
+    onPaginationChange: (updater) => {
+      const newPagination = typeof updater === 'function' 
+        ? updater(table.getState().pagination) 
+        : updater
+      
+      // 更新页面大小
+      if (newPagination.pageSize !== pageSize) {
+        setPageSize(newPagination.pageSize)
+        // 当页面大小改变时，重置到第一页
+        setPage(1)
+      }
+      
+      // 更新页面索引
+      if (newPagination.pageIndex + 1 !== page) {
+        setPage(newPagination.pageIndex + 1)
+      }
+    },
+  })
+
   return (
     <>
       <Header fixed>
@@ -221,44 +260,58 @@ export function DatasetDetailPage() {
           </div>
         </div>
 
-        <div className='px-1'>
+        <div className='px-1 pb-20'>
           <Card className='border-none shadow-none'>
             <CardHeader>
               <CardTitle>数据表{detail?.table_name ? `：${detail.table_name}` : ''}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className='border rounded overflow-x-auto max-h-[60vh] overflow-auto'>
-                <Table className='min-w-[800px]'>
-                  <TableHeader>
-                    <TableRow>
-                      {columns.map((c) => (
-                        <TableHead key={c}>{c}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results.map((hit) => {
-                      const src = (hit._source as any) || {}
-                      const row: Record<string, any> | undefined = src.row
-                      return (
-                        <TableRow key={hit._id}>
+            <CardContent className='p-0'>
+                <div className='border rounded overflow-hidden h-[calc(100vh-270px)] flex flex-col'>
+                  {/* 固定表头 */}
+                  <div className='overflow-x-auto border-b'>
+                    <Table className='min-w-[800px]'>
+                      <TableHeader className='sticky top-0 bg-background z-10'>
+                        <TableRow>
                           {columns.map((c) => (
-                            <TableCell key={c}>{row ? String(row[c] ?? '') : String(src[c] ?? '')}</TableCell>
+                            <TableHead key={c}>{c}</TableHead>
                           ))}
                         </TableRow>
-                      )
-                    })}
-                    {results.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={Math.max(columns.length, 1)} className='text-center text-sm text-muted-foreground py-8'>
-                          {loading ? '加载中...' : '暂无数据'}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                      </TableHeader>
+                    </Table>
+                  </div>
+                  {/* 可滚动表格内容 */}
+                  <div className='flex-1 overflow-auto'>
+                    <Table className='min-w-[800px]'>
+                      <TableBody>
+                        {results.map((hit) => {
+                          const src = (hit._source as any) || {}
+                          const row: Record<string, any> | undefined = src.row
+                          return (
+                            <TableRow key={hit._id}>
+                              {columns.map((c) => (
+                                <TableCell key={c}>{row ? String(row[c] ?? '') : String(src[c] ?? '')}</TableCell>
+                              ))}
+                            </TableRow>
+                          )})}
+                        {results.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={Math.max(columns.length, 1)} className='text-center text-sm text-muted-foreground py-8'>
+                              {loading ? '加载中...' : '暂无数据'}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
             </CardContent>
+                
+                {/* 分页控制 - 固定在Card底部 */}
+                {total > 0 && (
+                  <div className='border-t p-1 bg-background sticky bottom-0'>
+                    <DataTablePagination table={table} />
+                  </div>
+                )}
           </Card>
         </div>
       </Main>

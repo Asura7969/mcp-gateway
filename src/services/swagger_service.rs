@@ -1,6 +1,7 @@
 use crate::models::{
-    CreateEndpointRequest, McpConfig, SwaggerSpec, SwaggerToMcpRequest, SwaggerToMcpResponse,
+    CreateEndpointRequest, SwaggerSpec, SwaggerToMcpRequest, SwaggerToMcpResponse,
 };
+use crate::models::endpoint::McpConfig;
 use crate::services::EndpointService;
 use crate::utils::generate_mcp_tools;
 use anyhow::{anyhow, Result};

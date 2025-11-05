@@ -83,6 +83,35 @@ export interface TableSearchRequest {
   similarity_threshold?: number
 }
 
+export interface TableSearchPagedRequest {
+  dataset_id: string
+  query: string
+  page?: number
+  page_size?: number
+}
+
+export interface PaginationInfo {
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+}
+
+export interface PaginatedDatasetsResponse {
+  datasets: DatasetResponse[]
+  pagination: PaginationInfo
+}
+
+export interface EsSearchPagedResponse {
+  hits: {
+    total: { value: number }
+    hits: EsHit[]
+  }
+  page: number
+  page_size: number
+  total_pages: number
+}
+
 // Elasticsearch response shape (simplified)
 export interface EsHitSource {
   page_content: string

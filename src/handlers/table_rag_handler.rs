@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::models::table_rag::{
     ColumnSchema, CreateDatasetRequest, DatasetDetailResponse, DatasetResponse,
-    UpdateDatasetRequest,
+    PaginatedDatasetsResponse, UpdateDatasetRequest,
 };
 use crate::services::TableRagService;
 
@@ -27,6 +27,14 @@ pub struct TableSearchRequest {
     pub query: String,
     pub max_results: Option<u32>,
     pub similarity_threshold: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TableSearchPagedRequest {
+    pub dataset_id: String,
+    pub query: String,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,7 +64,7 @@ pub struct ListDatasetsQuery {
 pub async fn list_datasets_handler(
     State(state): State<TableRagState>,
     Query(query): Query<ListDatasetsQuery>,
-) -> Result<Json<Vec<DatasetResponse>>, (StatusCode, String)> {
+) -> Result<Json<PaginatedDatasetsResponse>, (StatusCode, String)> {
     let page = query.page.unwrap_or(1);
     let page_size = query.page_size.unwrap_or(20);
     state
@@ -149,6 +157,26 @@ pub async fn search_handler(
     state
         .service
         .search(dataset_id, &req.query, max, req.similarity_threshold)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+pub async fn search_paged_handler(
+    State(state): State<TableRagState>,
+    Json(req): Json<TableSearchPagedRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let dataset_id = Uuid::parse_str(&req.dataset_id).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Invalid dataset_id: {}", e),
+        )
+    })?;
+    let page = req.page.unwrap_or(1);
+    let page_size = req.page_size.unwrap_or(20);
+    state
+        .service
+        .search_paged(dataset_id, &req.query, page, page_size)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
