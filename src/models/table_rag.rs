@@ -292,6 +292,20 @@ impl From<Dataset> for DatasetDetailResponse {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedDatasetsResponse {
+    pub datasets: Vec<DatasetResponse>,
+    pub pagination: PaginationInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationInfo {
+    pub page: u32,
+    pub page_size: u32,
+    pub total: u64,
+    pub total_pages: u32,
+}
+
 // Custom UUID (de)serialization helpers
 mod uuid_as_string {
     use serde::{self, Deserialize, Deserializer, Serializer};

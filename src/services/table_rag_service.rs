@@ -2,7 +2,7 @@ use crate::config::EmbeddingConfig;
 use crate::models::{
     table_rag::{
         ColumnSchema, ColumnType, CreateDatasetRequest, Dataset, DatasetResponse, FileMeta,
-        IngestTask,
+        IngestTask, PaginatedDatasetsResponse, PaginationInfo,
     },
     DbPool,
 };
@@ -258,9 +258,18 @@ impl TableRagService {
         &self,
         page: u32,
         page_size: u32,
-    ) -> Result<Vec<DatasetResponse>> {
+    ) -> Result<PaginatedDatasetsResponse> {
         let limit = page_size.max(1);
         let offset = (page.saturating_sub(1) * limit) as i64;
+        
+        // 获取总记录数
+        let total: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM t_dataset"#
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        
+        // 获取分页数据
         let rows = sqlx::query_as::<_, Dataset>(
             r#"SELECT id, name, description, type, table_name, index_name, table_schema, index_mapping, retrieval_column, reply_column, similarity_threshold, max_results, create_time, update_time
                FROM t_dataset ORDER BY update_time DESC LIMIT ? OFFSET ?"#
@@ -269,7 +278,23 @@ impl TableRagService {
         .bind(offset)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(|d| d.into()).collect())
+        
+        let datasets: Vec<DatasetResponse> = rows.into_iter().map(|d| d.into()).collect();
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total as f64 / limit as f64).ceil() as u32
+        };
+        
+        Ok(PaginatedDatasetsResponse {
+            datasets,
+            pagination: PaginationInfo {
+                page,
+                page_size: limit,
+                total: total as u64,
+                total_pages,
+            },
+        })
     }
 
     pub async fn update_dataset(
@@ -915,6 +940,112 @@ impl TableRagService {
             if let Some(hits) = response_body["hits"]["hits"].as_array_mut() {
                 hits.retain(|h| h["_score"].as_f64().unwrap_or(0.0) >= effective_threshold as f64);
             }
+        }
+
+        Ok(response_body)
+    }
+
+    pub async fn search_paged(
+        &self,
+        dataset_id: Uuid,
+        query: &str,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Value> {
+        let dataset = self.get_dataset_by_id(dataset_id).await?;
+
+        // Limit returned fields to reply_column (comma-separated). If empty, default to all.
+        let reply_cols: Vec<String> = dataset
+            .reply_column
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut root = serde_json::map::Map::new();
+        
+        // 构建普通查询（非向量查询）
+        if !query.is_empty() {
+            let mut query_obj = serde_json::map::Map::new();
+            let mut multi_match = serde_json::map::Map::new();
+            multi_match.insert("query".to_string(), Value::String(query.to_string()));
+            
+            // 获取所有可搜索的列
+            let searchable_columns: Vec<String> = {
+                let rc = dataset.retrieval_column.trim();
+                if !rc.is_empty() {
+                    rc.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                } else {
+                    // 从schema中获取searchable=true的列
+                    let columns: Vec<ColumnSchema> = 
+                        serde_json::from_value(dataset.table_schema.clone()).unwrap_or_default();
+                    columns
+                        .iter()
+                        .filter(|c| c.searchable)
+                        .map(|c| c.name.clone())
+                        .collect()
+                }
+            };
+            
+            if !searchable_columns.is_empty() {
+                multi_match.insert("fields".to_string(), Value::Array(
+                    searchable_columns.iter().map(|f| Value::String(f.clone())).collect()
+                ));
+                query_obj.insert("multi_match".to_string(), Value::Object(multi_match));
+            } else {
+                // 如果没有指定搜索列，使用match_all查询
+                query_obj.insert("match_all".to_string(), Value::Object(serde_json::map::Map::new()));
+            }
+            
+            root.insert("query".to_string(), Value::Object(query_obj));
+        } else {
+            // 空查询时使用match_all
+            let mut query_obj = serde_json::map::Map::new();
+            query_obj.insert("match_all".to_string(), Value::Object(serde_json::map::Map::new()));
+            root.insert("query".to_string(), Value::Object(query_obj));
+        }
+        
+        if !reply_cols.is_empty() {
+            root.insert("_source".to_string(), json!({"includes": reply_cols}));
+        } else {
+            root.insert("_source".to_string(), Value::Bool(true));
+        }
+        
+        // 添加分页参数
+        let from = (page.saturating_sub(1) * page_size) as i64;
+        root.insert("from".to_string(), Value::Number(Number::from(from)));
+        root.insert("size".to_string(), Value::Number(Number::from(page_size)));
+
+        let search_response = self
+            .client
+            .search(SearchParts::Index(&[&dataset.index_name]))
+            .body(Value::Object(root))
+            .send()
+            .await?;
+        let mut response_body = search_response.json::<Value>().await?;
+
+        // 添加分页信息到响应
+        if response_body["hits"]["hits"].is_array() {
+            let total_hits = response_body["hits"]["total"]["value"].as_u64().unwrap_or(0);
+            let total_pages = if page_size > 0 {
+                (total_hits as f64 / page_size as f64).ceil() as u64
+            } else {
+                0
+            };
+
+            let pagination_info = json!({
+                "page": page,
+                "page_size": page_size,
+                "total": total_hits,
+                "total_pages": total_pages,
+                "has_next": page < total_pages as u32,
+                "has_prev": page > 1
+            });
+
+            response_body["pagination"] = pagination_info;
         }
 
         Ok(response_body)

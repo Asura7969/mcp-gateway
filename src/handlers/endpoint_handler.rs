@@ -1,8 +1,8 @@
 use crate::models::{
-    CreateEndpointRequest, EndpointDetailResponse, EndpointMetrics, EndpointQueryParams,
-    EndpointResponse, PaginatedEndpointsResponse, PaginationInfo, SwaggerSpec,
-    UpdateEndpointRequest,
+    CreateEndpointRequest, EndpointDetailResponse, EndpointQueryParams,
+    EndpointResponse, PaginatedEndpointsResponse, SwaggerSpec, UpdateEndpointRequest,
 };
+use crate::models::endpoint::{EndpointMetrics, PaginationInfo};
 use crate::state::AppState;
 use axum::{
     extract::{Path, Query, State},

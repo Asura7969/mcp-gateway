@@ -1,4 +1,5 @@
-use crate::models::{ApiDetail, ApiParameter, DbPool, McpTool, SwaggerSpec};
+use crate::models::endpoint::{ApiDetail, ApiParameter};
+use crate::models::{DbPool, McpTool, SwaggerSpec};
 use anyhow::anyhow;
 use serde_json::Value;
 use uuid::Uuid;

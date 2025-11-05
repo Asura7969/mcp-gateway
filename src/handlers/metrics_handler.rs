@@ -1,4 +1,4 @@
-use crate::models::EndpointMetrics;
+use crate::models::endpoint::EndpointMetrics;
 use crate::state::AppState;
 use axum::{extract::State, http::StatusCode, response::Json};
 

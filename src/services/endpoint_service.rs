@@ -1,7 +1,8 @@
 use crate::models::{
-    CreateEndpointRequest, DbPool, Endpoint, EndpointDetailResponse, EndpointMetrics,
-    EndpointResponse, EndpointStatus, McpConfig, UpdateEndpointRequest,
+    CreateEndpointRequest, DbPool, Endpoint, EndpointDetailResponse,
+    EndpointResponse, EndpointStatus, UpdateEndpointRequest,
 };
+use crate::models::endpoint::{McpConfig, EndpointMetrics};
 use crate::services::EndpointEvent;
 use crate::utils::{generate_api_details, get_china_time};
 use anyhow::Result;

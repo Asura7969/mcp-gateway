@@ -9,6 +9,7 @@ import {
   type EsSearchResponse,
   type ColumnSchema,
   type IngestTask,
+  type PaginatedDatasetsResponse,
 } from './schema'
 
 const api = axios.create({
@@ -17,7 +18,7 @@ const api = axios.create({
 })
 
 export class TableRagApiService {
-  static async listDatasets(page?: number, page_size?: number): Promise<DatasetResponse[]> {
+  static async listDatasets(page?: number, page_size?: number): Promise<PaginatedDatasetsResponse> {
     const params: Record<string, any> = {}
     if (page) params.page = page
     if (page_size) params.page_size = page_size
@@ -47,6 +48,11 @@ export class TableRagApiService {
 
   static async search(payload: TableSearchRequest): Promise<EsSearchResponse> {
     const res = await api.post('/api/table-rag/search', payload)
+    return res.data
+  }
+
+  static async searchPaged(payload: TableSearchPagedRequest): Promise<EsSearchPagedResponse> {
+    const res = await api.post('/api/table-rag/search-paged', payload)
     return res.data
   }
 

@@ -1,7 +1,8 @@
 use crate::handlers::{
     create_dataset_handler, get_dataset_handler, ingest_dataset_file_handler,
     list_datasets_handler, list_remote_tables_handler, list_tasks_handler, preview_schema_handler,
-    search_handler, test_remote_connection_handler, update_dataset_handler, TableRagState,
+    search_handler, search_paged_handler, test_remote_connection_handler, update_dataset_handler,
+    TableRagState,
 };
 use axum::{
     routing::{get, post},
@@ -24,6 +25,7 @@ pub fn create_table_rag_routes() -> Router<TableRagState> {
             post(preview_schema_handler),
         )
         .route("/api/table-rag/search", post(search_handler))
+        .route("/api/table-rag/search-paged", post(search_paged_handler))
         .route("/api/table-rag/tasks", get(list_tasks_handler))
         .route(
             "/api/table-rag/remote/test-connection",

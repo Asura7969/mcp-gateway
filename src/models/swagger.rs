@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::endpoint::McpConfig;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwaggerSpec {
     pub openapi: String,
@@ -103,7 +105,7 @@ pub struct SwaggerToMcpRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SwaggerToMcpResponse {
     pub endpoint_id: uuid::Uuid,
-    pub mcp_config: crate::models::McpConfig,
+    pub mcp_config: McpConfig,
     pub tools: Vec<McpTool>,
 }
 
