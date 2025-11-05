@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Header } from '@/components/layout/header'
 import { HeaderActions } from '@/components/layout/header-actions'
 import { Main } from '@/components/layout/main'
@@ -36,6 +36,30 @@ function DatasetDetailPage() {
   const [polling, setPolling] = useState<boolean>(false)
   const [taskDot, setTaskDot] = useState<'green' | 'yellow' | 'red' | 'gray'>('gray')
   const [latestUpdate, setLatestUpdate] = useState<string | null>(null)
+  const headerRef = useRef(null)
+  const bodyRef = useRef(null)
+
+  // 同步表头和表体的水平滚动
+  useEffect(() => {
+    const header = headerRef.current
+    const body = bodyRef.current
+    if (!header || !body) return
+
+    const syncScroll = (source, target) => {
+      target.scrollLeft = source.scrollLeft
+    }
+
+    const onHeaderScroll = () => syncScroll(header, body)
+    const onBodyScroll = () => syncScroll(body, header)
+
+    header.addEventListener('scroll', onHeaderScroll)
+    body.addEventListener('scroll', onBodyScroll)
+
+    return () => {
+      header.removeEventListener('scroll', onHeaderScroll)
+      body.removeEventListener('scroll', onBodyScroll)
+    }
+  }, [])
 
   // 分页加载数据
   useEffect(() => {
@@ -266,43 +290,35 @@ function DatasetDetailPage() {
               <CardTitle>数据表{detail?.table_name ? `：${detail.table_name}` : ''}</CardTitle>
             </CardHeader>
             <CardContent className='p-0'>
-                <div className='border rounded overflow-hidden h-[calc(100vh-270px)] flex flex-col'>
-                  {/* 固定表头 */}
-                  <div className='overflow-x-auto border-b'>
-                    <Table className='min-w-[800px]'>
-                      <TableHeader className='sticky top-0 bg-background z-10'>
-                        <TableRow>
-                          {columns.map((c) => (
-                            <TableHead key={c}>{c}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                    </Table>
-                  </div>
-                  {/* 可滚动表格内容 */}
-                  <div className='flex-1 overflow-auto'>
-                    <Table className='min-w-[800px]'>
-                      <TableBody>
-                        {results.map((hit) => {
-                          const src = (hit._source as any) || {}
-                          const row: Record<string, any> | undefined = src.row
-                          return (
-                            <TableRow key={hit._id}>
-                              {columns.map((c) => (
-                                <TableCell key={c}>{row ? String(row[c] ?? '') : String(src[c] ?? '')}</TableCell>
-                              ))}
-                            </TableRow>
-                          )})}
-                        {results.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={Math.max(columns.length, 1)} className='text-center text-sm text-muted-foreground py-8'>
-                              {loading ? '加载中...' : '暂无数据'}
-                            </TableCell>
+                <div className='border rounded overflow-auto h-[calc(100vh-270px)]'>
+                  <Table className='min-w-[800px]'>
+                    <TableHeader>
+                      <TableRow>
+                        {columns.map((c) => (
+                          <TableHead key={c}>{c}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {results.map((hit) => {
+                        const src = (hit._source as any) || {}
+                        const row: Record<string, any> | undefined = src.row
+                        return (
+                          <TableRow key={hit._id}>
+                            {columns.map((c) => (
+                              <TableCell key={c}>{row ? String(row[c] ?? '') : String(src[c] ?? '')}</TableCell>
+                            ))}
                           </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        )})}
+                      {results.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={Math.max(columns.length, 1)} className='text-center text-sm text-muted-foreground py-8'>
+                            {loading ? '加载中...' : '暂无数据'}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
             </CardContent>
                 
