@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useReactTable, getCoreRowModel, getPaginationRowModel } from '@tanstack/react-table'
+import { type Table } from '@tanstack/react-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
@@ -24,6 +24,7 @@ export function Endpoints() {
     pageSize: 10,
   })
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const tableRef = useRef<Table<any> | null>(null)
 
   const fetchData = async (search?: string) => {
     try {
@@ -84,23 +85,8 @@ export function Endpoints() {
     fetchData()
   }, [])
 
-  // 创建表格实例 - 简化版本，主要用于分页控制
-  const table = useReactTable({
-    data,
-    columns: [
-      { accessorKey: 'name', header: 'service' },
-      { accessorKey: 'description', header: 'description' },
-      { accessorKey: 'created_at', header: 'create time' },
-      { id: 'actions', header: 'action' }
-    ],
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    state: {
-      pagination,
-    },
-    onPaginationChange: setPagination,
-    manualPagination: false,
-  })
+  // Note: We don't create a table instance here anymore
+  // The EndpointsTable component will handle its own table creation with proper action buttons
 
   return (
     <>
@@ -141,10 +127,10 @@ export function Endpoints() {
         <div className='px-1 flex flex-col' style={{ height: 'calc(100vh - 240px)' }}>
           <div className='flex-1 overflow-auto'>
             <EndpointsTable
+              ref={tableRef}
               data={data}
               onDataReload={() => fetchData(searchQuery)}
               loading={loading}
-              table={table}
             />
           </div>
         </div>
@@ -152,7 +138,7 @@ export function Endpoints() {
         {/* 分页控制 - 固定在页面底部 */}
         <div className='bg-background p-3 flex-shrink-0'>
           <div className='max-w-7xl mx-auto'>
-            <DataTablePagination table={table} />
+            {tableRef.current && <DataTablePagination table={tableRef.current} />}
           </div>
         </div>
       </Main>

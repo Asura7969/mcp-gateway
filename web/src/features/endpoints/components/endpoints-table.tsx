@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react'
 import {
   type ColumnFiltersState,
   type SortingState,
@@ -9,6 +9,7 @@ import {
   getFacetedUniqueValues,
   getFilteredRowModel,
   getSortedRowModel,
+  getPaginationRowModel,
   useReactTable,
   type Row,
   type Table,
@@ -265,10 +266,11 @@ type DataTableProps = {
   data: Endpoint[]
   onDataReload?: () => void
   loading?: boolean
-  table?: Table<any>
+  onTableChange?: (table: Table<any>) => void
 }
 
-export function EndpointsTable({ data, onDataReload, loading = false, table }: DataTableProps) {
+export const EndpointsTable = forwardRef<Table<any>, DataTableProps>(
+  ({ data, onDataReload, loading = false, onTableChange }, ref) => {
   // Local UI-only states
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -463,8 +465,8 @@ export function EndpointsTable({ data, onDataReload, loading = false, table }: D
     },
   ]
 
-  // 如果没有传入 table 实例，则创建一个内部的（保持向后兼容）
-  const internalTable = useReactTable({
+  // 创建表格实例
+  const tableInstance = useReactTable({
     data,
     columns,
     state: {
@@ -479,10 +481,17 @@ export function EndpointsTable({ data, onDataReload, loading = false, table }: D
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    getPaginationRowModel: getPaginationRowModel(),
     onColumnFiltersChange: setColumnFilters,
   })
 
-  const tableInstance = table || internalTable
+  // 暴露 table 实例给父组件
+  useImperativeHandle(ref, () => tableInstance, [tableInstance])
+
+  // 当 table 实例改变时通知父组件
+  useEffect(() => {
+    onTableChange?.(tableInstance)
+  }, [tableInstance, onTableChange])
 
   // 添加ESC键关闭功能
   useEffect(() => {
@@ -931,7 +940,9 @@ export function EndpointsTable({ data, onDataReload, loading = false, table }: D
       </Dialog>
     </div>
   )
-}
+})
+
+EndpointsTable.displayName = 'EndpointsTable'
 
 // 创建一个类似Apifox UI的JSON字段展示组件
 function ApiFieldDisplay({ schema, title }: { schema: any; title: string }) {
