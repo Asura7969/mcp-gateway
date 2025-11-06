@@ -220,7 +220,7 @@ function DatasetDetailPage() {
         <HeaderActions />
       </Header>
       <Main fixed fluid>
-        <div className='sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[-webkit-backdrop-filter]:bg-background/60 supports-[backdrop-filter]:bg-background/60'>
+        <div className='sticky top-0 z-40 bg-background/80 backdrop-blur supports-[-webkit-backdrop-filter]:bg-background/60 supports-[backdrop-filter]:bg-background/60'>
           <div className='flex items-center justify-between py-3'>
             <Breadcrumb>
               <BreadcrumbList>
@@ -284,13 +284,13 @@ function DatasetDetailPage() {
           </div>
         </div>
 
-        <div className='px-1 pb-20'>
-          <Card className='border-none shadow-none'>
-            <CardHeader>
+        <div className='px-1 flex flex-col' style={{ height: 'calc(100vh - 180px)' }}>
+          <Card className='border-none shadow-none flex-1 flex flex-col min-h-0'>
+            <CardHeader className='flex-shrink-0'>
               <CardTitle>数据表{detail?.table_name ? `：${detail.table_name}` : ''}</CardTitle>
             </CardHeader>
-            <CardContent className='p-0'>
-                <div className='border rounded overflow-auto h-[calc(100vh-270px)]'>
+            <CardContent className='p-0 flex-1 flex flex-col min-h-0'>
+                <div className='overflow-auto flex-1'>
                   <Table className='min-w-[800px]'>
                     <TableHeader>
                       <TableRow>
@@ -321,14 +321,16 @@ function DatasetDetailPage() {
                   </Table>
                 </div>
             </CardContent>
-                
-                {/* 分页控制 - 固定在Card底部 */}
-                {total > 0 && (
-                  <div className='border-t p-1 bg-background sticky bottom-0'>
-                    <DataTablePagination table={table} />
-                  </div>
-                )}
           </Card>
+
+          {/* 分页控制 - 固定在页面底部 */}
+          {total > 0 && (
+            <div className='bg-background p-3 flex-shrink-0'>
+              <div className='max-w-7xl mx-auto'>
+                <DataTablePagination table={table} />
+              </div>
+            </div>
+          )}
         </div>
       </Main>
 

@@ -8,10 +8,10 @@ import {
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type Row,
+  type Table,
 } from '@tanstack/react-table'
 import {
   Table,
@@ -21,11 +21,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
-import { DataTablePagination } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Eye, Edit, Trash2, Settings, Copy, RefreshCw, Loader2 } from 'lucide-react'
+import { Eye, Edit, Trash2, Settings, Copy, RefreshCw, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -37,7 +35,6 @@ import { Textarea } from '@/components/ui/textarea'
 import SyntaxHighlighter from 'react-syntax-highlighter'
 import { github } from 'react-syntax-highlighter/dist/esm/styles/hljs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { type Endpoint } from '../data/schema'
@@ -267,20 +264,15 @@ const ActionsCell = ({
 type DataTableProps = {
   data: Endpoint[]
   onDataReload?: () => void
-  onSearch?: (query: string) => void
-  searchQuery?: string
   loading?: boolean
+  table?: Table<any>
 }
 
-export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '', loading = false }: DataTableProps) {
+export function EndpointsTable({ data, onDataReload, loading = false, table }: DataTableProps) {
   // Local UI-only states
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 10,
-  })
 
   // Dialog states
   const [isViewOpen, setIsViewOpen] = useState(false)
@@ -298,114 +290,7 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
   // 添加缓存状态
   const [detailCache, setDetailCache] = useState<Map<string, any>>(new Map())
 
-  // 添加ESC键关闭功能
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsViewOpen(false)
-        setIsEditOpen(false)
-        setIsConfigOpen(false)
-        setIsDeleteConfirmOpen(false)
-      }
-    }
-
-    window.addEventListener('keydown', handleEsc)
-    return () => {
-      window.removeEventListener('keydown', handleEsc)
-    }
-  }, [])
-
-  // 定义列
-  const columns = [
-    {
-      accessorKey: 'name',
-      header: 'service',
-    },
-    {
-      accessorKey: 'description',
-      header: 'description',
-    },
-    {
-      accessorKey: 'created_at',
-      header: 'create time',
-      cell: ({ row }: any) => {
-        const date = new Date(row.getValue('created_at'))
-        return <div>{date.toLocaleDateString()}</div>
-      },
-    },
-    {
-      id: 'actions',
-      header: 'action',
-      cell: ({ row }: { row: Row<Endpoint> }) => (
-        <ActionsCell
-          row={row}
-          onView={handleView}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onConfig={handleConfig}
-          onSync={handleSync}
-          isSyncing={isSyncing}
-          loadingDetailId={loadingDetailId}
-        />
-      ),
-    },
-  ]
-
-  const table = useReactTable({
-    data,
-    columns,
-    state: {
-      sorting,
-      columnVisibility,
-      columnFilters,
-      pagination,
-    },
-    onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
-    onPaginationChange: setPagination,
-    onColumnFiltersChange: setColumnFilters,
-  })
-
-
-
-  // 获取方法徽章样式
-  const getMethodBadgeClass = (method: string) => {
-    const methodClassMap: Record<string, string> = {
-      GET: 'bg-green-100 text-green-800',
-      POST: 'bg-purple-100 text-purple-800',
-      PUT: 'bg-orange-100 text-orange-800',
-      DELETE: 'bg-red-100 text-red-800',
-      PATCH: 'bg-primary/10 text-primary',
-    }
-
-    return methodClassMap[method] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-  }
-
-  // 切换API详情展开状态
-  const toggleApiDetail = (index: number) => {
-    setOpenApiDetails(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }))
-  }
-
-  // 复制Swagger JSON
-  const copySwaggerJson = () => {
-    if (endpointDetail?.swagger_spec) {
-      navigator.clipboard.writeText(JSON.stringify(endpointDetail.swagger_spec, null, 2))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  // 处理查看操作
-  // 优化的handleView函数，支持缓存和预处理
+  // 处理操作函数
   const handleView = useCallback(async (row: Row<Endpoint>) => {
     const endpointId = row.original.id
 
@@ -480,7 +365,6 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
     }
   }, [detailCache])
 
-  // 处理编辑操作
   const handleEdit = async (row: Row<Endpoint>) => {
     try {
       setSelectedEndpoint(row.original)
@@ -492,19 +376,16 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
     }
   }
 
-  // 处理删除操作
   const handleDelete = (row: Row<Endpoint>) => {
     setSelectedEndpoint(row.original)
     setIsDeleteConfirmOpen(true)
   }
 
-  // 处理配置操作
   const handleConfig = (row: Row<Endpoint>) => {
     setSelectedEndpoint(row.original)
     setIsConfigOpen(true)
   }
 
-  // 处理同步操作
   const handleSync = async (row: Row<Endpoint>) => {
     setIsSyncing(true)
     try {
@@ -543,6 +424,110 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
       })
     } finally {
       setIsSyncing(false)
+    }
+  }
+
+  // 定义列
+  const columns = [
+    {
+      accessorKey: 'name',
+      header: 'service',
+    },
+    {
+      accessorKey: 'description',
+      header: 'description',
+    },
+    {
+      accessorKey: 'created_at',
+      header: 'create time',
+      cell: ({ row }: any) => {
+        const date = new Date(row.getValue('created_at'))
+        return <div>{date.toLocaleDateString()}</div>
+      },
+    },
+    {
+      id: 'actions',
+      header: 'action',
+      cell: ({ row }: { row: Row<Endpoint> }) => (
+        <ActionsCell
+          row={row}
+          onView={handleView}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onConfig={handleConfig}
+          onSync={handleSync}
+          isSyncing={isSyncing}
+          loadingDetailId={loadingDetailId}
+        />
+      ),
+    },
+  ]
+
+  // 如果没有传入 table 实例，则创建一个内部的（保持向后兼容）
+  const internalTable = useReactTable({
+    data,
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+      columnFilters,
+    },
+    onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    onColumnFiltersChange: setColumnFilters,
+  })
+
+  const tableInstance = table || internalTable
+
+  // 添加ESC键关闭功能
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsViewOpen(false)
+        setIsEditOpen(false)
+        setIsConfigOpen(false)
+        setIsDeleteConfirmOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleEsc)
+    return () => {
+      window.removeEventListener('keydown', handleEsc)
+    }
+  }, [])
+
+  // 获取方法徽章样式
+  const getMethodBadgeClass = (method: string) => {
+    const methodClassMap: Record<string, string> = {
+      GET: 'bg-green-100 text-green-800',
+      POST: 'bg-purple-100 text-purple-800',
+      PUT: 'bg-orange-100 text-orange-800',
+      DELETE: 'bg-red-100 text-red-800',
+      PATCH: 'bg-primary/10 text-primary',
+    }
+
+    return methodClassMap[method] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+  }
+
+  // 切换API详情展开状态
+  const toggleApiDetail = (index: number) => {
+    setOpenApiDetails(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }))
+  }
+
+  // 复制Swagger JSON
+  const copySwaggerJson = () => {
+    if (endpointDetail?.swagger_spec) {
+      navigator.clipboard.writeText(JSON.stringify(endpointDetail.swagger_spec, null, 2))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -668,18 +653,10 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
 
   return (
     <div className='space-y-4 max-sm:has-[div[role="toolbar"]]:mb-16'>
-      <div className='flex flex-col sm:flex-row gap-4'>
-        <Input
-          placeholder='search by service name...'
-          value={searchQuery}
-          onChange={(event) => onSearch?.(event.target.value)}
-          className='max-w-sm'
-        />
-      </div>
       <div className='overflow-hidden rounded-md border'>
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
+            {tableInstance.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
@@ -709,8 +686,8 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
                   </div>
                 </TableCell>
               </TableRow>
-            ) : table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+            ) : tableInstance.getRowModel().rows?.length ? (
+              tableInstance.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
                 >
@@ -737,7 +714,6 @@ export function EndpointsTable({ data, onDataReload, onSearch, searchQuery = '',
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} />
 
       {/* View Dialog */}
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>

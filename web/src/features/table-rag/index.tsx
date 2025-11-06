@@ -549,12 +549,14 @@ export function TableRagPage() {
         </Tabs>
         </div>
 
-        {/* 底部粘性分页栏：使用 DataTablePagination 组件 */}
-        <div className='sticky bottom-0 z-40 border-t bg-background/80 backdrop-blur supports-[-webkit-backdrop-filter]:bg-background/60 supports-[backdrop-filter]:bg-background/60'>
-          <div className='p-1'>
-            <DataTablePagination table={table} />
+        {/* 分页控制 - 与知识库详情页保持一致的布局 */}
+        {total > 0 && (
+          <div className='bg-background p-3 flex-shrink-0'>
+            <div className='max-w-7xl mx-auto'>
+              <DataTablePagination table={table} />
+            </div>
           </div>
-        </div>
+        )}
 
 
       </Main>
